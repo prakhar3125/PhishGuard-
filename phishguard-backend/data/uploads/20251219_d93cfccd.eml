@@ -1,0 +1,25 @@
+/// PHISHING TRAINING SAMPLE – FOR EDUCATIONAL USE ONLY ///
+/// NOT A REAL EMAIL – CONTAINS PLACEHOLDERS ///
+
+Content-Type: multipart/mixed; boundary="===============TRAINING_BOUNDARY_001=="
+MIME-Version: 1.0
+From: [EXECUTIVE_NAME] <executive@external-domain.example>
+To: [FINANCE_ROLE] <finance@company.example>
+Subject: Urgent Financial Request
+Date: Fri, 19 Dec 2025 21:48:08 +0000
+X-Originating-IP: [SUSPICIOUS_IP]
+Received: from unknown.mail.host ([SUSPICIOUS_IP]) by internal.mx with ESMTP
+
+--===============TRAINING_BOUNDARY_001==
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+
+I am currently in a meeting and unavailable to speak.
+Please process an urgent financial action for a third-party entity.
+
+This request is confidential and time-sensitive.
+
+Sent from a mobile device
+
+--===============TRAINING_BOUNDARY_001==--

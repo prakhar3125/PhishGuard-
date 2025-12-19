@@ -15,7 +15,7 @@ class PhishingCase(Base):
     recipient = Column(String(255))
     subject = Column(Text)
     
-    # ✅ NEW: Store file path instead of massive text blobs
+    # ✅ File Path for Lazy Loading
     file_path = Column(String(500), nullable=True)
     # Legacy support (nullable)
     body = Column(Text, nullable=True)
@@ -27,7 +27,7 @@ class PhishingCase(Base):
     risk_score = Column(Integer, default=0)
     ml_prediction = Column(Float)
     
-    # ✅ NEW: Store the Math Breakdown for the UI Graph
+    # ✅ CRITICAL: Stores { "threat_intel": 100, "ml": 50 ... } for the UI Graph
     breakdown = Column(JSON, default={})
     
     # IOCs - MySQL JSON support
@@ -44,7 +44,7 @@ class PhishingCase(Base):
     
     # Processing
     processing_time = Column(Float)  # seconds
-    processed_at = Column(DateTime)
+    processed_at = Column(DateTime, default=datetime.utcnow)
     analyst_notes = Column(Text)
     
     # Relationships
