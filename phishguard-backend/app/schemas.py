@@ -37,9 +37,10 @@ class EmailSubmission(BaseModel):
 
 class CaseResponse(BaseModel):
     id: int
-    email_id: str
-    sender: str
-    subject: str
+    email_id: Optional[str] = None
+    sender: Optional[str] = None       # <--- ADD THIS
+    subject: Optional[str] = None
+    body: Optional[str] = None         # <--- ADD THIS (Critical for the dropdown!)
     verdict: str
     risk_score: int
     received_time: datetime
