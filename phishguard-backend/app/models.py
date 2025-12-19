@@ -14,12 +14,21 @@ class PhishingCase(Base):
     sender_domain = Column(String(255), index=True)
     recipient = Column(String(255))
     subject = Column(Text)
+    
+    # ✅ NEW: Store file path instead of massive text blobs
+    file_path = Column(String(500), nullable=True)
+    # Legacy support (nullable)
+    body = Column(Text, nullable=True)
+    
     received_time = Column(DateTime, default=datetime.utcnow)
     
     # Analysis Results
     verdict = Column(String(50), index=True)  # MALICIOUS / SUSPICIOUS / CLEAN
     risk_score = Column(Integer, default=0)
     ml_prediction = Column(Float)
+    
+    # ✅ NEW: Store the Math Breakdown for the UI Graph
+    breakdown = Column(JSON, default={})
     
     # IOCs - MySQL JSON support
     extracted_ips = Column(JSON)

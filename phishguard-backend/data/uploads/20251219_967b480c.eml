@@ -1,0 +1,23 @@
+Content-Type: multipart/mixed; boundary="===============4751858603648868581=="
+MIME-Version: 1.0
+From: security-update@paypal-security.top
+To: victim@company.com
+Subject: URGENT: Your account has been suspended
+Date: Fri, 19 Dec 2025 21:48:08 +0000
+X-Originating-IP: 192.168.6.66
+Received: from mail.server.com ([192.168.6.66]) by internal.mx with ESMTP
+
+--===============4751858603648868581==
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+
+Dear Customer,
+
+We detected unusual activity.
+Click here to verify: http://secure-bank-verify.xyz/login
+
+If you do not act, your account will be locked.
+
+Support Team
+--===============4751858603648868581==--

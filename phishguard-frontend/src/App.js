@@ -59,7 +59,7 @@ const storage = {
 const api = {
   client: axios.create({
     baseURL: API_BASE_URL,
-    timeout: 30000,
+    timeout: 60000,
     headers: { 'Content-Type': 'application/json' },
   }),
 
@@ -88,6 +88,14 @@ const api = {
       return { data: response.data, error: null };
     } catch (error) {
       return { data: null, error: error.response?.data?.message || 'Analysis failed' };
+    }
+  },
+  async fetchEmailContent(caseId) {
+    try {
+      const response = await this.client.get(`/cases/${caseId}/content`);
+      return { data: response.data.content, error: null };
+    } catch (error) {
+      return { data: null, error: 'Failed to fetch email content' };
     }
   },
 };
@@ -427,6 +435,15 @@ const StatsDashboard = ({ stats, loading }) => {
 /**
  * File Upload Section
  */
+/**
+ * UPDATED Upload Section - Persistent Results
+ */
+/**
+ * UPDATED Upload Section - Persistent Results (No Auto-Clear)
+ */
+/**
+ * UPDATED Upload Section - No Auto-Hide, Better Error Logging
+ */
 const UploadSection = ({ onAnalysisComplete }) => {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -445,122 +462,89 @@ const UploadSection = ({ onAnalysisComplete }) => {
     }
   };
 
-  const handleInputChange = (e) => {
-    handleFileChange(e.target.files?.[0]);
-  };
+  const handleInputChange = (e) => handleFileChange(e.target.files?.[0]);
 
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileChange(e.dataTransfer.files[0]);
-    }
-  };
+  // Drag handlers
+  const handleDrag = (e) => { e.preventDefault(); e.stopPropagation(); if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true); else setDragActive(false); };
+  const handleDrop = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFileChange(e.dataTransfer.files[0]); };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!file) {
-      setError('Please select a file to analyze');
-      return;
-    }
+    if (!file) { setError('Please select a file'); return; }
 
     setLoading(true);
     setError(null);
     setProgress(0);
+    // Don't clear 'result' immediately so UI doesn't jump
 
+    console.log("📤 Sending to Backend...");
+    
+    // Call API
     const { data, error: apiError } = await api.analyzeEmail(file, setProgress);
 
     if (apiError) {
-      setError(apiError);
+      console.error("❌ Analysis Error:", apiError);
+      setError(apiError); // Show the error on screen
       setResult(null);
     } else {
+      console.log("✅ Success:", data);
       setResult(data);
       setError(null);
-      onAnalysisComplete?.();
+      onAnalysisComplete?.(); // Refresh the table
       
-      // Reset form after 3 seconds
-      setTimeout(() => {
-        setFile(null);
-        setResult(null);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-      }, 3000);
+      // 🚀 FIXED: Removed the setTimeout() here. 
+      // The result will stay on screen until YOU click "Clear".
     }
 
     setLoading(false);
     setProgress(0);
   };
 
-  const handleBrowse = () => {
-    fileInputRef.current?.click();
+  const handleClear = () => {
+    setFile(null);
+    setResult(null);
+    setError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  const handleBrowse = () => fileInputRef.current?.click();
 
   return (
     <Card className="upload-section">
       <div className="upload-section__header">
         <h2 className="upload-section__title">Analyze New Email</h2>
-        <p className="upload-section__subtitle">
-          Upload an email file (.eml, .msg) to analyze for phishing threats
-        </p>
+        <p className="upload-section__subtitle">Upload an email (.eml) to analyze.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="upload-form">
-        <div
-          className={`upload-dropzone ${dragActive ? 'upload-dropzone--active' : ''} ${
-            file ? 'upload-dropzone--has-file' : ''
-          }`}
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
-          onClick={handleBrowse}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            onChange={handleInputChange}
-            className="upload-input"
-            accept=".eml,.msg,.txt"
-            aria-label="Email file upload"
-          />
-
-          {file ? (
-            <div className="upload-file-info">
-              <span className="upload-file-icon">📎</span>
-              <div className="upload-file-details">
-                <p className="upload-file-name">{file.name}</p>
-                <p className="upload-file-size">{formatFileSize(file.size)}</p>
+        {/* Hide dropzone if result is shown */}
+        {!result && (
+          <div
+            className={`upload-dropzone ${dragActive ? 'upload-dropzone--active' : ''} ${file ? 'upload-dropzone--has-file' : ''}`}
+            onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop} onClick={handleBrowse}
+          >
+            <input ref={fileInputRef} type="file" onChange={handleInputChange} className="upload-input" accept=".eml,.msg,.txt" />
+            {file ? (
+              <div className="upload-file-info">
+                <span className="upload-file-icon">📎</span>
+                <div className="upload-file-details">
+                  <p className="upload-file-name">{file.name}</p>
+                  <p className="upload-file-size">{formatFileSize(file.size)}</p>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="upload-placeholder">
-              <span className="upload-placeholder__icon">📁</span>
-              <p className="upload-placeholder__text">
-                <strong>Click to browse</strong> or drag and drop
-              </p>
-              <p className="upload-placeholder__hint">EML, MSG files up to 10MB</p>
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="upload-placeholder">
+                <span className="upload-placeholder__icon">📁</span>
+                <p className="upload-placeholder__text"><strong>Click to browse</strong> or drag & drop</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {loading && (
           <div className="upload-progress">
             <ProgressBar value={progress} showLabel size="lg" />
-            <p className="upload-progress__text">Analyzing email...</p>
+            <p className="upload-progress__text">Analyzing... (AI Processing)</p>
           </div>
         )}
 
@@ -575,45 +559,25 @@ const UploadSection = ({ onAnalysisComplete }) => {
           <div className="upload-alert upload-alert--success" role="status">
             <span className="upload-alert__icon">{getVerdictStyle(result.verdict).icon}</span>
             <div className="upload-alert__content">
-              <p className="upload-alert__message">
-                <strong>Analysis Complete</strong>
-              </p>
-              <p className="upload-alert__detail">
-                Verdict: <Badge variant={getVerdictStyle(result.verdict).variant}>
-                  {result.verdict}
-                </Badge>
-                {result.risk_score && ` • Risk Score: ${result.risk_score}%`}
-              </p>
+              <p className="upload-alert__message"><strong>Analysis Complete</strong></p>
+              <div className="upload-alert__detail">
+                Verdict: <Badge variant={getVerdictStyle(result.verdict).variant} className="mx-2">{result.verdict}</Badge>
+                • Risk Score: {result.risk_score}/100
+              </div>
             </div>
           </div>
         )}
 
         <div className="upload-actions">
-          <Button
-            type="submit"
-            variant="primary"
-            size="lg"
-            loading={loading}
-            disabled={!file || loading}
-          >
-            {loading ? 'Analyzing...' : 'Analyze Email'}
-          </Button>
-
-          {file && !loading && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="lg"
-              onClick={() => {
-                setFile(null);
-                setResult(null);
-                setError(null);
-                if (fileInputRef.current) {
-                  fileInputRef.current.value = '';
-                }
-              }}
-            >
-              Clear
+          {!result && (
+            <Button type="submit" variant="primary" size="lg" loading={loading} disabled={!file || loading}>
+              {loading ? 'Analyzing...' : 'Analyze Email'}
+            </Button>
+          )}
+          
+          {(file || result) && !loading && (
+            <Button type="button" variant={result ? "primary" : "ghost"} size="lg" onClick={handleClear}>
+              {result ? 'Analyze Another Email' : 'Clear'}
             </Button>
           )}
         </div>
@@ -621,23 +585,44 @@ const UploadSection = ({ onAnalysisComplete }) => {
     </Card>
   );
 };
-
 /**
  * Cases Table Component
  */
 /**
  * UPDATED Cases Table Component with Expandable Details
  */
+/**
+ * UPDATED Cases Table Component with Fetch-on-Click Logic
+ */
 const CasesTable = ({ cases, loading }) => {
   const [sortField, setSortField] = useState('id');
   const [sortDirection, setSortDirection] = useState('desc');
   const [filter, setFilter] = useState('all');
   
-  // New State for expanded row
+  // ✅ NEW: State for expanded row and cached content
   const [expandedRowId, setExpandedRowId] = useState(null);
+  const [emailContent, setEmailContent] = useState({});
+  const [loadingContent, setLoadingContent] = useState(false);
 
-  const toggleRow = (id) => {
-    setExpandedRowId(expandedRowId === id ? null : id);
+  // ✅ UPDATED: Fetch content when row is toggled
+  const toggleRow = async (id) => {
+    if (expandedRowId === id) {
+      setExpandedRowId(null);
+      return;
+    }
+
+    setExpandedRowId(id);
+
+    // If content not loaded yet, fetch it
+    if (!emailContent[id]) {
+      setLoadingContent(true);
+      const { data } = await api.fetchEmailContent(id);
+      setEmailContent(prev => ({ 
+        ...prev, 
+        [id]: data || "Error: Could not load content." 
+      }));
+      setLoadingContent(false);
+    }
   };
 
   const handleSort = (field) => {
@@ -669,7 +654,6 @@ const CasesTable = ({ cases, loading }) => {
     return aVal < bVal ? 1 : -1;
   });
 
-  // Helper to determine score color
   const getScoreColor = (score) => {
     if (score >= 70) return 'score-item__value--high';
     if (score >= 40) return 'score-item__value--med';
@@ -712,7 +696,7 @@ const CasesTable = ({ cases, loading }) => {
         <table className="cases-table">
           <thead>
             <tr>
-              <th style={{ width: '50px' }}></th> {/* Arrow Column */}
+              <th style={{ width: '50px' }}></th>
               <th onClick={() => handleSort('id')} className="cases-table__th--sortable">ID</th>
               <th onClick={() => handleSort('subject')} className="cases-table__th--sortable">Subject</th>
               <th onClick={() => handleSort('verdict')} className="cases-table__th--sortable">Verdict</th>
@@ -723,6 +707,8 @@ const CasesTable = ({ cases, loading }) => {
             {sortedCases.map((caseItem) => {
               const verdictStyle = getVerdictStyle(caseItem.verdict);
               const isExpanded = expandedRowId === caseItem.id;
+              // ✅ Get real score breakdown or default to 0
+              const scores = caseItem.breakdown || {}; 
 
               return (
                 <React.Fragment key={caseItem.id}>
@@ -764,43 +750,55 @@ const CasesTable = ({ cases, loading }) => {
                                   <span>{caseItem.sender || 'Unknown Sender'}</span>
                                   
                                   <span className="email-meta__label">Date:</span>
-                                  <span>{caseItem.received_time ? new Date(caseItem.received_time).toLocaleString() : 'N/A'}</span>
+                                  <span>{caseItem.processed_at ? new Date(caseItem.processed_at).toLocaleString() : 'N/A'}</span>
                                   
                                   <span className="email-meta__label">Subject:</span>
                                   <span>{caseItem.subject}</span>
                                 </div>
                               </div>
                               <div className="email-body">
-                                {caseItem.body || 
-                                  "Original email content was not stored in summary view. (In a real app, this fetches from /api/cases/id)"}
+                                {/* ✅ DISPLAY FETCHED CONTENT OR SKELETON */}
+                                {loadingContent && !emailContent[caseItem.id] ? (
+                                   <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+                                     <Skeleton width="100%" height="16px" />
+                                     <Skeleton width="90%" height="16px" />
+                                     <Skeleton width="95%" height="16px" />
+                                   </div>
+                                ) : (
+                                   emailContent[caseItem.id] || "No content found on server."
+                                )}
                               </div>
                             </div>
 
-                            {/* Right: Score Breakdown (Simulated Logic for Visual) */}
+                            {/* Right: Score Breakdown (Real Data) */}
                             <div className="score-breakdown">
                               <h4 className="breakdown-title">🛡️ Risk Calculation</h4>
                               
-                              {/* Threat Intel Score */}
                               <div className="score-item">
                                 <span className="score-item__label">Threat Intelligence</span>
-                                <span className={`score-item__value ${getScoreColor(caseItem.risk_score > 80 ? 100 : 0)}`}>
-                                  {caseItem.risk_score > 80 ? '+100' : '0'}
+                                <span className={`score-item__value ${getScoreColor(scores.threat_intel || 0)}`}>
+                                  +{scores.threat_intel || 0}
                                 </span>
                               </div>
 
-                              {/* ML Analysis */}
                               <div className="score-item">
-                                <span className="score-item__label">AI/ML Model Confidence</span>
-                                <span className={`score-item__value ${getScoreColor(caseItem.risk_score)}`}>
-                                  {caseItem.risk_score > 50 ? `+${Math.floor(caseItem.risk_score * 0.8)}` : 'Low'}
+                                <span className="score-item__label">AI/ML Model</span>
+                                <span className={`score-item__value ${getScoreColor(scores.ml_analysis || 0)}`}>
+                                  +{scores.ml_analysis || 0}
                                 </span>
                               </div>
 
-                              {/* Keyword/Heuristic */}
                               <div className="score-item">
-                                <span className="score-item__label">Keyword Analysis</span>
-                                <span className={`score-item__value ${getScoreColor(caseItem.verdict === 'SUSPICIOUS' ? 50 : 0)}`}>
-                                  {caseItem.verdict === 'SUSPICIOUS' ? '+50' : '+10'}
+                                <span className="score-item__label">Attachments</span>
+                                <span className={`score-item__value ${getScoreColor(scores.attachment_risk || 0)}`}>
+                                  +{scores.attachment_risk || 0}
+                                </span>
+                              </div>
+
+                              <div className="score-item">
+                                <span className="score-item__label">Keywords (Heuristics)</span>
+                                <span className={`score-item__value ${getScoreColor(scores.heuristic_risk || 0)}`}>
+                                  +{scores.heuristic_risk || 0}
                                 </span>
                               </div>
 

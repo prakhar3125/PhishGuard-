@@ -1,0 +1,21 @@
+Content-Type: multipart/mixed; boundary="===============9123930728956003044=="
+MIME-Version: 1.0
+From: boss@company.com
+To: you@company.com
+Subject: Meeting Agenda for Q1
+Date: Fri, 19 Dec 2025 21:48:08 +0000
+X-Originating-IP: 10.0.0.5
+Received: from mail.server.com ([10.0.0.5]) by internal.mx with ESMTP
+
+--===============9123930728956003044==
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+
+Hi team,
+
+Please review the attached agenda for tomorrow's meeting.
+
+Thanks,
+Boss
+--===============9123930728956003044==--

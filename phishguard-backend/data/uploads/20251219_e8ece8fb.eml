@@ -1,0 +1,25 @@
+Content-Type: multipart/mixed; boundary="===============0822994929792214582=="
+MIME-Version: 1.0
+From: billing@unknown-vendor.com
+To: finance@company.com
+Subject: Invoice INV-2024-001
+Date: Fri, 19 Dec 2025 21:48:08 +0000
+X-Originating-IP: 45.33.22.11
+Received: from mail.server.com ([45.33.22.11]) by internal.mx with ESMTP
+
+--===============0822994929792214582==
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+
+Please find the attached invoice.
+--===============0822994929792214582==
+Content-Type: application/octet-stream; Name="invoice_scan.docm"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="invoice_scan.docm"
+
+VGhpcyBpcyBhIGR1bW15IGZpbGUgYnV0IGltYWdpbmUgaXQgaGFzIFZCQSBtYWNyb3M6IEF1dG9P
+cGVuKCk=
+
+--===============0822994929792214582==--

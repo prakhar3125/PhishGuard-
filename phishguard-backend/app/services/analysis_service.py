@@ -1,5 +1,7 @@
 import time
-from typing import Dict, List
+import os
+import uuid
+from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
 
@@ -11,32 +13,54 @@ from app.core.risk_scorer import RiskScorer
 from app.models import PhishingCase, IOC
 from app.config import settings
 
+# Define where emails will be stored on disk
+UPLOAD_DIR = "data/uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 class AnalysisService:
     def __init__(self, db: Session):
         self.db = db
         self.ioc_extractor = IOCExtractor()
         self.threat_intel = ThreatIntelligence(db)
         self.attachment_analyzer = AttachmentAnalyzer()
-        self.ml_classifier = PhishingClassifier(settings.ML_MODEL_PATH)
+        # Initialize ML Classifier (handle if model path is missing)
+        try:
+            self.ml_classifier = PhishingClassifier(settings.ML_MODEL_PATH)
+        except:
+            self.ml_classifier = PhishingClassifier()
+        
         self.risk_scorer = RiskScorer()
     
     def analyze_email(self, raw_email: bytes, email_id: str = None) -> Dict:
         """Complete email analysis pipeline"""
         start_time = time.time()
         
-        # Step 1: Extract IOCs
+        # 1. Save Email to Disk
+        file_ext = ".eml"
+        unique_filename = f"{datetime.now().strftime('%Y%m%d')}_{uuid.uuid4().hex[:8]}{file_ext}"
+        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+        
+        try:
+            with open(file_path, "wb") as f:
+                f.write(raw_email)
+            print(f"💾 Email saved to disk: {file_path}")
+        except Exception as e:
+            print(f"⚠️ Failed to save email to disk: {e}")
+            file_path = None
+
+        # 2. Extract IOCs
         print(f"[1/5] Extracting IOCs...")
         extraction_result = self.ioc_extractor.extract_from_raw_email(raw_email)
         
-        # Step 2: Threat Intelligence Enrichment
+        # 3. Threat Intelligence
         print(f"[2/5] Checking threat intelligence...")
         threat_intel_results = self._enrich_threat_intelligence(extraction_result)
         
-        # Step 3: Attachment Analysis
+        # 4. Attachment Analysis
         print(f"[3/5] Analyzing attachments...")
         attachment_results = self._analyze_attachments(extraction_result.get('attachments', []))
         
-        # Step 4: ML Classification
+        # 5. ML Classification
         print(f"[4/5] Running ML classification...")
         ml_prediction = self.ml_classifier.predict({
             'subject': extraction_result.get('subject', ''),
@@ -44,7 +68,7 @@ class AnalysisService:
             'sender': extraction_result.get('sender', '')
         })
         
-        # Step 5: Risk Scoring
+        # 6. Risk Scoring
         print(f"[5/5] Calculating risk score...")
         risk_analysis = self.risk_scorer.calculate_risk_score({
             'sender': extraction_result.get('sender', ''),
@@ -57,7 +81,10 @@ class AnalysisService:
         
         processing_time = time.time() - start_time
         
-        # Save to database
+        # 7. Save to Database
+        # ✅ FIX 1: Safely get the score (Use .get('score') instead of ['total_score'])
+        final_score = risk_analysis.get('score', 0)
+        
         case = self._save_case(
             email_id=email_id or self._generate_email_id(),
             extraction_result=extraction_result,
@@ -65,7 +92,9 @@ class AnalysisService:
             attachment_results=attachment_results,
             ml_prediction=ml_prediction,
             risk_analysis=risk_analysis,
-            processing_time=processing_time
+            processing_time=processing_time,
+            file_path=file_path,
+            final_score=final_score
         )
         
         print(f"✓ Analysis complete in {processing_time:.2f}s - Verdict: {risk_analysis['verdict']}")
@@ -73,76 +102,67 @@ class AnalysisService:
         return {
             'case_id': case.id,
             'email_id': case.email_id,
-            'verdict': risk_analysis['verdict'],
-            'risk_score': risk_analysis['total_score'],
+            'verdict': risk_analysis.get('verdict', 'UNKNOWN'),
+            # ✅ FIX 2: This was the line causing the crash!
+            'risk_score': final_score, 
+            'breakdown': risk_analysis.get('breakdown', {}),
             'processing_time': processing_time,
             'extraction': extraction_result,
             'threat_intel': threat_intel_results,
             'attachments': attachment_results,
-            'ml_prediction': ml_prediction,
-            'risk_breakdown': risk_analysis
+            'ml_prediction': ml_prediction
         }
+
+    def get_email_content(self, case_id: int) -> Optional[str]:
+        """Fetch raw content from disk"""
+        case = self.db.query(PhishingCase).filter(PhishingCase.id == case_id).first()
+        if not case:
+            return None
+            
+        if case.file_path and os.path.exists(case.file_path):
+            try:
+                with open(case.file_path, 'r', encoding='utf-8', errors='replace') as f:
+                    return f.read()
+            except Exception as e:
+                return f"Error reading file: {str(e)}"
+        
+        return case.body or "Content not found."
     
     def _enrich_threat_intelligence(self, extraction_result: Dict) -> List[Dict]:
-        """Enrich IOCs with threat intelligence"""
         results = []
-        
-        # Check IPs
-        for ip in extraction_result.get('ips', [])[:10]:  # Limit to avoid rate limits
-            result = self.threat_intel.check_ip(ip)
-            results.append(result)
-        
-        # Check URLs
-        for url in extraction_result.get('urls', [])[:10]:
-            result = self.threat_intel.check_url(url)
-            results.append(result)
-        
-        # Check Domains
-        for domain in extraction_result.get('domains', [])[:10]:
-            result = self.threat_intel.check_domain(domain)
-            results.append(result)
-        
-        # Check file hashes
-        for attachment in extraction_result.get('attachments', []):
-            file_hash = attachment.get('sha256')
-            if file_hash:
-                result = self.threat_intel.check_file_hash(file_hash)
-                results.append(result)
-        
+        for ip in extraction_result.get('ips', [])[:5]:
+            results.append(self.threat_intel.check_ip(ip))
+        for url in extraction_result.get('urls', [])[:5]:
+            results.append(self.threat_intel.check_url(url))
+        for domain in extraction_result.get('domains', [])[:5]:
+            results.append(self.threat_intel.check_domain(domain))
         return results
     
     def _analyze_attachments(self, attachments: List[Dict]) -> List[Dict]:
-        """Analyze all attachments"""
         results = []
-        
         for attachment in attachments:
             filename = attachment.get('filename', '')
             content = attachment.get('content', b'')
-            
             if content:
-                analysis = self.attachment_analyzer.analyze_attachment(filename, content)
-                results.append(analysis)
-        
+                results.append(self.attachment_analyzer.analyze_attachment(filename, content))
         return results
     
     def _save_case(self, email_id: str, extraction_result: Dict, 
                    threat_intel_results: List, attachment_results: List,
-                   ml_prediction: Dict, risk_analysis: Dict, processing_time: float) -> PhishingCase:
-        """Save analysis results to database"""
+                   ml_prediction: Dict, risk_analysis: Dict, 
+                   processing_time: float, file_path: str, final_score: int) -> PhishingCase:
         
-        # Extract sender domain
         sender = extraction_result.get('sender', '')
         sender_domain = sender.split('@')[1] if '@' in sender else ''
         
-        # Create case
         case = PhishingCase(
             email_id=email_id,
             sender=sender,
             sender_domain=sender_domain,
             recipient=extraction_result.get('recipient', ''),
             subject=extraction_result.get('subject', ''),
-            verdict=risk_analysis['verdict'],
-            risk_score=risk_analysis['total_score'],
+            verdict=risk_analysis.get('verdict'),
+            risk_score=final_score, 
             ml_prediction=ml_prediction.get('phishing_probability', 0),
             extracted_ips=extraction_result.get('ips', []),
             extracted_urls=extraction_result.get('urls', []),
@@ -151,7 +171,8 @@ class AnalysisService:
             threat_intel_results=[self._serialize_threat_intel(t) for t in threat_intel_results],
             attachment_analysis=[self._serialize_attachment(a) for a in attachment_results],
             header_analysis=extraction_result.get('headers', {}),
-            body_analysis={'ml_prediction': ml_prediction, 'risk_breakdown': risk_analysis},
+            breakdown=risk_analysis.get('breakdown', {}),
+            file_path=file_path,
             processing_time=processing_time,
             processed_at=datetime.utcnow()
         )
@@ -159,7 +180,7 @@ class AnalysisService:
         self.db.add(case)
         self.db.flush()
         
-        # Create IOC records
+        # Save IOCs
         for result in threat_intel_results:
             ioc = IOC(
                 case_id=case.id,
@@ -177,12 +198,9 @@ class AnalysisService:
         return case
     
     def _generate_email_id(self) -> str:
-        """Generate unique email ID"""
-        import uuid
         return f"email_{uuid.uuid4().hex[:12]}"
     
     def _serialize_threat_intel(self, result: Dict) -> Dict:
-        """Serialize threat intel result for JSON storage"""
         return {
             'ioc_value': result.get('ioc_value'),
             'ioc_type': result.get('ioc_type'),
@@ -192,7 +210,6 @@ class AnalysisService:
         }
     
     def _serialize_attachment(self, result: Dict) -> Dict:
-        """Serialize attachment analysis for JSON storage"""
         return {
             'filename': result.get('filename'),
             'file_type': result.get('file_type'),
