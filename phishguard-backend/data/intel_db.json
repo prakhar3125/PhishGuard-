@@ -1,0 +1,22 @@
+{
+  "bad_ips": [
+    "192.168.6.66",
+    "45.33.22.11",
+    "185.220.101.1",
+    "103.253.145.34"
+  ],
+  "bad_domains": [
+    "phish-login.com",
+    "secure-bank-verify.xyz",
+    "paypal-security.top",
+    "account-verify.ml"
+  ],
+  "malicious_strings": [
+    "AutoOpen",
+    "Document_Open",
+    "ShellExecute",
+    "powershell.exe -enc",
+    "WScript.Shell",
+    "URLDownloadToFile"
+  ]
+}
