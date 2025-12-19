@@ -8,10 +8,11 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api/v1"
     DEBUG: bool = True
     
-    # MySQL Database - CHANGED
-    DATABASE_URL: str = "mysql+pymysql://root:your_mysql_password@localhost:3306/phishguard"
+    # MySQL Database
+    # Remove the default string. Let Pydantic scream if it's missing from .env
+    DATABASE_URL: str 
     
-    # Threat Intelligence API Keys
+    # Threat Intelligence API Keys (Optional allows None, but tries to load from env)
     VIRUSTOTAL_API_KEY: Optional[str] = None
     ABUSEIPDB_API_KEY: Optional[str] = None
     URLHAUS_API_KEY: Optional[str] = None
@@ -31,6 +32,8 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        # This is important! It allows extra variables in .env without crashing
+        extra = "ignore" 
         case_sensitive = True
 
 settings = Settings()

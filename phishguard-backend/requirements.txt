@@ -21,3 +21,10 @@ tldextract==5.1.1
 aiofiles==23.2.1
 python-jose==3.3.0
 passlib==1.7.4
+
+# Hugging Face & Deep Learning
+transformers==4.35.2
+torch==2.1.1
+datasets==2.15.0
+accelerate==0.25.0
+sentencepiece==0.1.99

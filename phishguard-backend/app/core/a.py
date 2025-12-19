@@ -40,7 +40,7 @@ class PhishingClassifier:
         
         # Transformer settings - Using pre-trained phishing model
         self.use_transformer = use_transformer and TRANSFORMERS_AVAILABLE
-        self.transformer_model_name = 'ealvaradob/bert-finetuned-phishing'
+        self.transformer_model_name = 'benjamin/roberta-base-phishing'
         self.tokenizer = None
         self.transformer_model = None
         self.transformer_pipeline = None
@@ -166,69 +166,48 @@ class PhishingClassifier:
         else:
             return self._heuristic_prediction(email_content)
     
- 
     def _predict_with_transformer(self, email_text: str) -> Dict:
-            """Predict using Transformer model with dynamic label handling"""
-            try:
-                # Truncate if too long (standard limit is 512 tokens)
-                max_length = 512
-                
-                # 1. ADDED: Memory protection
-                with torch.no_grad():
-                    results = self.transformer_pipeline(
-                        email_text[:2000], 
-                        truncation=True,
-                        max_length=max_length
-                    )
-                
-                # 2. CHANGED: Dynamic Label Logic (Fixes the 0.0% bug)
-                phishing_score = 0.0
-                legitimate_score = 0.0
-                
-                # We check for various label names so it works with ANY model
-                phishing_aliases = ['phishing', 'spam', 'malicious', 'label_1', '1']
-                legit_aliases = ['benign', 'ham', 'legitimate', 'safe', 'label_0', '0']
-                
-                for result in results[0]:
-                    label_clean = result['label'].lower()
-                    score = result['score']
-                    
-                    if any(alias in label_clean for alias in phishing_aliases):
-                        phishing_score = score
-                    elif any(alias in label_clean for alias in legit_aliases):
-                        legitimate_score = score
-                
-                # 3. ADDED: Fallback if model only returns one label
-                if phishing_score == 0.0 and legitimate_score > 0.0:
-                    phishing_score = 1.0 - legitimate_score
-                elif legitimate_score == 0.0 and phishing_score > 0.0:
-                    legitimate_score = 1.0 - phishing_score
-                    
-                is_phishing = phishing_score > legitimate_score
-                confidence = max(phishing_score, legitimate_score)
-                
-                return {
-                    'is_phishing': is_phishing,
-                    'phishing_probability': float(phishing_score),
-                    'legitimate_probability': float(legitimate_score),
-                    'confidence': float(confidence),
-                    'method': 'roberta_transformer',
-                    'model': self.transformer_model_name
-                }
+        """Predict using RoBERTa phishing model"""
+        try:
+            # Truncate if too long (RoBERTa max length is 512 tokens)
+            max_length = 512
             
-            except Exception as e:
-                print(f"⚠️  Transformer prediction error: {e}")
-                # Fallback to heuristic
-                return self._heuristic_prediction({'body': email_text})    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+            # Get prediction with all scores
+            results = self.transformer_pipeline(
+                email_text[:2000],  # Truncate characters before tokenization
+                truncation=True,
+                max_length=max_length
+            )
+            
+            # Parse results - benjamin/roberta-base-phishing returns:
+            # [{'label': 'LABEL_0', 'score': X}, {'label': 'LABEL_1', 'score': Y}]
+            # LABEL_1 = phishing, LABEL_0 = legitimate
+            
+            phishing_score = 0.0
+            legitimate_score = 0.0
+            
+            for result in results[0]:  # results is a list of lists
+                if result['label'] == 'LABEL_1':
+                    phishing_score = result['score']
+                elif result['label'] == 'LABEL_0':
+                    legitimate_score = result['score']
+            
+            is_phishing = phishing_score > legitimate_score
+            confidence = max(phishing_score, legitimate_score)
+            
+            return {
+                'is_phishing': is_phishing,
+                'phishing_probability': float(phishing_score),
+                'legitimate_probability': float(legitimate_score),
+                'confidence': float(confidence),
+                'method': 'roberta_transformer',
+                'model': self.transformer_model_name
+            }
+        
+        except Exception as e:
+            print(f"⚠️  Transformer prediction error: {e}")
+            # Fallback to heuristic
+            return self._heuristic_prediction({'body': email_text})
     
     def _predict_with_traditional(self, email_text: str) -> Dict:
         """Predict using traditional ML model"""
