@@ -1,6 +1,22 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
+import {
+  Shield,
+  FileText,
+  AlertTriangle,
+  AlertOctagon,
+  CheckCircle,
+  Upload,
+  File,
+  ChevronDown,
+  Activity,
+  X,
+  Check
+} from "lucide-react";
+import { RefreshCw, Moon, Sun } from 'lucide-react'; // Add to imports
+import { XCircle } from 'lucide-react'; // Add to imports
+import { ArrowUp } from 'lucide-react'; // Add to imports
 
 /**
  * PhishGuard Pro - Email Security Analysis Dashboard
@@ -116,14 +132,25 @@ const formatFileSize = (bytes) => {
  */
 const getVerdictStyle = (verdict) => {
   const styles = {
-    MALICIOUS: { variant: 'danger', icon: '🚨' },
-    SUSPICIOUS: { variant: 'warning', icon: '⚠️' },
-    SAFE: { variant: 'success', icon: '✅' },
-    CLEAN: { variant: 'success', icon: '✅' },
+    MALICIOUS: { 
+      variant: 'danger', 
+      icon: <AlertOctagon size={20} /> 
+    },
+    SUSPICIOUS: { 
+      variant: 'warning', 
+      icon: <AlertTriangle size={20} /> 
+    },
+    SAFE: { 
+      variant: 'success', 
+      icon: <CheckCircle size={20} /> 
+    },
+    CLEAN: { 
+      variant: 'success', 
+      icon: <CheckCircle size={20} /> 
+    },
   };
   return styles[verdict] || styles.SAFE;
 };
-
 // ============================================================================
 // CUSTOM HOOKS
 // ============================================================================
@@ -365,7 +392,9 @@ const Header = ({ onThemeToggle, theme, onRefresh }) => {
     <header className="header">
       <div className="header__content">
         <div className="header__brand">
-          <span className="header__icon">🛡️</span>
+          <div className="header__icon">
+  <Shield size={36} />
+</div>
           <h1 className="header__title">PhishGuard Pro</h1>
         </div>
 
@@ -376,22 +405,22 @@ const Header = ({ onThemeToggle, theme, onRefresh }) => {
           </div>
 
           <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={onRefresh}
-            aria-label="Refresh data"
-          >
-            🔄
-          </Button>
+  variant="ghost" 
+  size="sm" 
+  onClick={onRefresh}
+  aria-label="Refresh data"
+>
+  <RefreshCw size={16} />
+</Button>
 
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={onThemeToggle}
-            aria-label="Toggle theme"
-          >
-            {theme === 'light' ? '🌙' : '☀️'}
-          </Button>
+<Button 
+  variant="ghost" 
+  size="sm" 
+  onClick={onThemeToggle}
+  aria-label="Toggle theme"
+>
+  {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+</Button>
         </div>
       </div>
     </header>
@@ -405,29 +434,29 @@ const StatsDashboard = ({ stats, loading }) => {
   return (
     <div className="stats-dashboard">
       <StatCard
-        icon="📊"
-        label="Total Analyzed"
-        value={stats.total_processed}
-        loading={loading}
-      />
-      <StatCard
-        icon="🚨"
-        label="Malicious"
-        value={stats.malicious}
-        loading={loading}
-      />
-      <StatCard
-        icon="⚠️"
-        label="Suspicious"
-        value={stats.suspicious}
-        loading={loading}
-      />
-      <StatCard
-        icon="✅"
-        label="Safe"
-        value={stats.safe}
-        loading={loading}
-      />
+  icon={<FileText size={32} />}
+  label="Total Analyzed"
+  value={stats.total_processed}
+  loading={loading}
+/>
+<StatCard
+  icon={<AlertOctagon size={32} />}
+  label="Malicious"
+  value={stats.malicious}
+  loading={loading}
+/>
+<StatCard
+  icon={<AlertTriangle size={32} />}
+  label="Suspicious"
+  value={stats.suspicious}
+  loading={loading}
+/>
+<StatCard
+  icon={<CheckCircle size={32} />}
+  label="Safe"
+  value={stats.safe}
+  loading={loading}
+/>
     </div>
   );
 };
@@ -526,7 +555,9 @@ const UploadSection = ({ onAnalysisComplete }) => {
             <input ref={fileInputRef} type="file" onChange={handleInputChange} className="upload-input" accept=".eml,.msg,.txt" />
             {file ? (
               <div className="upload-file-info">
-                <span className="upload-file-icon">📎</span>
+                <span className="upload-file-icon">
+  <File size={32} />
+</span>
                 <div className="upload-file-details">
                   <p className="upload-file-name">{file.name}</p>
                   <p className="upload-file-size">{formatFileSize(file.size)}</p>
@@ -534,7 +565,9 @@ const UploadSection = ({ onAnalysisComplete }) => {
               </div>
             ) : (
               <div className="upload-placeholder">
-                <span className="upload-placeholder__icon">📁</span>
+                <span className="upload-placeholder__icon">
+  <Upload size={48} />
+</span>
                 <p className="upload-placeholder__text"><strong>Click to browse</strong> or drag & drop</p>
               </div>
             )}
@@ -550,7 +583,9 @@ const UploadSection = ({ onAnalysisComplete }) => {
 
         {error && (
           <div className="upload-alert upload-alert--error" role="alert">
-            <span className="upload-alert__icon">❌</span>
+            <span className="upload-alert__icon">
+  <XCircle size={20} />
+</span>
             <p className="upload-alert__message">{error}</p>
           </div>
         )}
@@ -720,8 +755,8 @@ const CasesTable = ({ cases, loading }) => {
                   >
                     <td className="cases-table__cell">
                       <button className={`toggle-btn ${isExpanded ? 'toggle-btn--expanded' : ''}`}>
-                        ▼
-                      </button>
+  <ChevronDown size={16} />
+</button>
                     </td>
                     <td className="cases-table__cell cases-table__cell--id">#{caseItem.id}</td>
                     <td className="cases-table__cell cases-table__cell--subject">{caseItem.subject}</td>
@@ -772,7 +807,9 @@ const CasesTable = ({ cases, loading }) => {
 
                             {/* Right: Score Breakdown (Real Data) */}
                             <div className="score-breakdown">
-                              <h4 className="breakdown-title">🛡️ Risk Calculation</h4>
+                              <h4 className="breakdown-title">
+  <Shield size={16} /> Risk Calculation
+</h4>
                               
                               <div className="score-item">
                                 <span className="score-item__label">Threat Intelligence</span>
@@ -863,7 +900,9 @@ function App() {
 
         {error && (
           <div className="app__error" role="alert">
-            <span className="app__error-icon">⚠️</span>
+            <span className="app__error-icon">
+  <AlertTriangle size={20} />
+</span>
             <p className="app__error-message">{error}</p>
             <Button variant="ghost" size="sm" onClick={refetch}>
               Retry
@@ -879,12 +918,12 @@ function App() {
 
         {showScrollTop && (
           <button
-            className="scroll-to-top"
-            onClick={scrollToTop}
-            aria-label="Scroll to top"
-          >
-            ↑
-          </button>
+  className="scroll-to-top"
+  onClick={scrollToTop}
+  aria-label="Scroll to top"
+>
+  <ArrowUp size={24} />
+</button>
         )}
 
         <footer className="app__footer">
