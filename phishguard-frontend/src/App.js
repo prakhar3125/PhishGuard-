@@ -435,6 +435,9 @@ const useTheme = () => {
 /**
  * Dashboard statistics hook with auto-refresh and caching
  */
+/**
+ * Dashboard statistics hook with auto-refresh and caching
+ */
 const useDashboardStats = (refreshInterval = REFRESH_INTERVAL) => {
   const [stats, setStats] = useState({
     total_processed: 0,
@@ -443,15 +446,16 @@ const useDashboardStats = (refreshInterval = REFRESH_INTERVAL) => {
     safe: 0,
     recent_cases: [],
     trends: {
-      total: 0,
-      malicious: 0,
-      suspicious: 0,
-      safe: 0
+      total: undefined,
+      malicious: undefined,
+      suspicious: undefined,
+      safe: undefined
     }
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastFetch, setLastFetch] = useState(null);
+  const prevStatsRef = useRef(null);
 
   const fetchStats = useCallback(async () => {
     const { data, error: fetchError } = await api.fetchCases();
@@ -467,18 +471,45 @@ const useDashboardStats = (refreshInterval = REFRESH_INTERVAL) => {
       const suspicious = data.filter((c) => c.verdict === VERDICT_TYPES.SUSPICIOUS).length;
       const safe = data.length - malicious - suspicious;
 
-      setStats({
+      const currentStats = {
         total_processed: data.length,
         malicious,
         suspicious,
-        safe,
+        safe
+      };
+
+      // Calculate trends if we have previous stats
+      let trends = {
+        total: undefined,
+        malicious: undefined,
+        suspicious: undefined,
+        safe: undefined
+      };
+
+      if (prevStatsRef.current) {
+        const prev = prevStatsRef.current;
+        
+        // Calculate percentage change, handle division by zero
+        const calcTrend = (current, previous) => {
+          if (previous === 0) return current > 0 ? 100 : 0;
+          return Math.round(((current - previous) / previous) * 100);
+        };
+
+        trends = {
+          total: calcTrend(currentStats.total_processed, prev.total_processed),
+          malicious: calcTrend(currentStats.malicious, prev.malicious),
+          suspicious: calcTrend(currentStats.suspicious, prev.suspicious),
+          safe: calcTrend(currentStats.safe, prev.safe)
+        };
+      }
+
+      // Store current stats for next comparison
+      prevStatsRef.current = currentStats;
+
+      setStats({
+        ...currentStats,
         recent_cases: data.slice(0, 100),
-        trends: {
-          total: 0,
-          malicious: 0,
-          suspicious: 0,
-          safe: 0
-        }
+        trends
       });
       setError(null);
       setLastFetch(new Date());
@@ -498,7 +529,6 @@ const useDashboardStats = (refreshInterval = REFRESH_INTERVAL) => {
 
   return { stats, loading, error, refetch: fetchStats, lastFetch };
 };
-
 /**
  * Keyboard shortcuts hook with customization
  */
@@ -1830,33 +1860,41 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                                 Risk Analysis
                               </h4>
 
-                              <div className="score-item">
-                                <span className="score-item__label">Threat Intelligence</span>
-                                <span className={`score-item__value ${getScoreColor(scores.threat_intel || 0)}`}>
-                                  +{scores.threat_intel || 0}
-                                </span>
-                              </div>
+                              {(scores.threat_intel || 0) > 0 && (
+                                <div className="score-item">
+                                  <span className="score-item__label">Threat Intelligence</span>
+                                  <span className={`score-item__value ${getScoreColor(scores.threat_intel)}`}>
+                                    +{scores.threat_intel}
+                                  </span>
+                                </div>
+                              )}
 
-                              <div className="score-item">
-                                <span className="score-item__label">AI/ML Model</span>
-                                <span className={`score-item__value ${getScoreColor(scores.ml_analysis || 0)}`}>
-                                  +{scores.ml_analysis || 0}
-                                </span>
-                              </div>
+                              {(scores.ml_analysis || 0) > 0 && (
+                                <div className="score-item">
+                                  <span className="score-item__label">AI/ML Model</span>
+                                  <span className={`score-item__value ${getScoreColor(scores.ml_analysis)}`}>
+                                    +{scores.ml_analysis}
+                                  </span>
+                                </div>
+                              )}
 
-                              <div className="score-item">
-                                <span className="score-item__label">Attachments</span>
-                                <span className={`score-item__value ${getScoreColor(scores.attachment_risk || 0)}`}>
-                                  +{scores.attachment_risk || 0}
-                                </span>
-                              </div>
+                              {(scores.attachment_risk || 0) > 0 && (
+                                <div className="score-item">
+                                  <span className="score-item__label">Attachments</span>
+                                  <span className={`score-item__value ${getScoreColor(scores.attachment_risk)}`}>
+                                    +{scores.attachment_risk}
+                                  </span>
+                                </div>
+                              )}
 
-                              <div className="score-item">
-                                <span className="score-item__label">Keywords (Heuristics)</span>
-                                <span className={`score-item__value ${getScoreColor(scores.heuristic_risk || 0)}`}>
-                                  +{scores.heuristic_risk || 0}
-                                </span>
-                              </div>
+                              {(scores.heuristic_risk || 0) > 0 && (
+                                <div className="score-item">
+                                  <span className="score-item__label">Keywords (Heuristics)</span>
+                                  <span className={`score-item__value ${getScoreColor(scores.heuristic_risk)}`}>
+                                    +{scores.heuristic_risk}
+                                  </span>
+                                </div>
+                              )}
 
                               <div className="score-item" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '2px solid var(--border-primary)' }}>
                                 <span className="score-item__label" style={{ fontWeight: '600', fontSize: '0.875rem' }}>

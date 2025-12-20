@@ -899,7 +899,12 @@ body {
   color: var(--text-primary);
   vertical-align: middle;
 }
-
+.cases-table__cell:nth-child(5) { /* 5th column = SENDER */
+  max-width: 200px; /* ADD THIS */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .cases-table__cell--id {
   color: var(--text-tertiary);
   font-weight: var(--font-weight-semibold);
@@ -909,16 +914,22 @@ body {
 
 .cases-table__cell--subject {
   font-weight: var(--font-weight-medium);
-  max-width: 400px;
+  max-width: 250px; /* Reduced from 400px */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.cases-table__cell--score {
-  min-width: 180px;
+/* Mobile adjustment */
+@media (max-width: 768px) {
+  .cases-table__cell--subject {
+    max-width: 120px; /* Reduced from 150px */
+  }
 }
-
+.cases-table__cell--score {
+  min-width: 150px; /* REDUCE from 180px */
+  max-width: 150px; /* ADD THIS */
+}
 /* Table Loading State */
 .cases-loading {
   padding: var(--space-8);
@@ -926,7 +937,13 @@ body {
   flex-direction: column;
   gap: var(--space-4);
 }
-
+/* 3. DATE COLUMN - Make more compact */
+.cases-table__cell:nth-child(8) { /* 8th column = DATE */
+  max-width: 150px; /* ADD THIS */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .cases-skeleton {
   margin-bottom: var(--space-3);
 }
@@ -936,7 +953,26 @@ body {
   padding: var(--space-12) var(--space-8);
   text-align: center;
 }
-
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .cases-table__cell--subject {
+    max-width: 120px;
+  }
+  
+  /* ADD THESE: */
+  .cases-table__cell:nth-child(5) { /* SENDER */
+    max-width: 120px;
+  }
+  
+  .cases-table__cell:nth-child(8) { /* DATE */
+    max-width: 100px;
+  }
+  
+  .cases-table__cell--score {
+    min-width: 120px;
+    max-width: 120px;
+  }
+}
 /* ============================================================================
    CASE DETAILS EXPANSION
    ============================================================================ */

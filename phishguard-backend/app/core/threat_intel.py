@@ -21,8 +21,8 @@ class ThreatIntelligence:
             db: SQLAlchemy database session
         """
         self.db = db
-        self.vt_api_key = settings.VIRUSTOTAL_API_KEY
-        self.abuseipdb_api_key = settings.ABUSEIPDB_API_KEY
+        self.vt_api_key = None 
+        self.abuseipdb_api_key = None
         self.cache_ttl_hours = 24
         
         # Optimization: Reuse TCP connections for all API calls
