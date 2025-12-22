@@ -1607,7 +1607,7 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
     );
   }
 
-  return (
+ return (
     <Card className="cases-table-card">
       <div className="cases-table-header">
         <h2 className="cases-table-title">
@@ -1682,9 +1682,11 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
       )}
 
       <div className="cases-table-wrapper custom-scrollbar">
-        <table className="cases-table">
+        {/* ✅ FIX: Added tableLayout: 'fixed' to prevent columns from jumping */}
+        <table className="cases-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
+              {/* ✅ FIX: Defined explicit widths for every column */}
               <th style={{ width: '40px' }}>
                 <input
                   type="checkbox"
@@ -1694,7 +1696,8 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                 />
               </th>
               <th style={{ width: '50px' }}></th>
-              <th onClick={() => handleSort(SORT_FIELDS.ID)} className="cases-table__th--sortable">
+              
+              <th style={{ width: '80px' }} onClick={() => handleSort(SORT_FIELDS.ID)} className="cases-table__th--sortable">
                 <div className="cases-table__header-content">
                   ID
                   {sortField === SORT_FIELDS.ID && (
@@ -1702,7 +1705,8 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                   )}
                 </div>
               </th>
-              <th onClick={() => handleSort(SORT_FIELDS.SUBJECT)} className="cases-table__th--sortable">
+              
+              <th style={{ width: '30%' }} onClick={() => handleSort(SORT_FIELDS.SUBJECT)} className="cases-table__th--sortable">
                 <div className="cases-table__header-content">
                   Subject
                   {sortField === SORT_FIELDS.SUBJECT && (
@@ -1710,7 +1714,8 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                   )}
                 </div>
               </th>
-              <th onClick={() => handleSort(SORT_FIELDS.SENDER)} className="cases-table__th--sortable">
+              
+              <th style={{ width: '20%' }} onClick={() => handleSort(SORT_FIELDS.SENDER)} className="cases-table__th--sortable">
                 <div className="cases-table__header-content">
                   Sender
                   {sortField === SORT_FIELDS.SENDER && (
@@ -1718,7 +1723,8 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                   )}
                 </div>
               </th>
-              <th onClick={() => handleSort(SORT_FIELDS.VERDICT)} className="cases-table__th--sortable">
+              
+              <th style={{ width: '120px' }} onClick={() => handleSort(SORT_FIELDS.VERDICT)} className="cases-table__th--sortable">
                 <div className="cases-table__header-content">
                   Verdict
                   {sortField === SORT_FIELDS.VERDICT && (
@@ -1726,7 +1732,8 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                   )}
                 </div>
               </th>
-              <th onClick={() => handleSort(SORT_FIELDS.PROCESSED_AT)} className="cases-table__th--sortable">
+              
+              <th style={{ width: '150px' }} onClick={() => handleSort(SORT_FIELDS.PROCESSED_AT)} className="cases-table__th--sortable">
                 <div className="cases-table__header-content">
                   Date
                   {sortField === SORT_FIELDS.PROCESSED_AT && (
@@ -1734,6 +1741,7 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                   )}
                 </div>
               </th>
+              
               <th style={{ width: '80px', textAlign: 'center' }}>Actions</th>
             </tr>
           </thead>
@@ -1745,7 +1753,6 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
               const isDeleting = deletingCases.has(caseItem.originalId);
               const scores = caseItem.breakdown || {};
               
-              // ✅ FIX 2: Use the snippet already in memory. This is instant.
               const snippet = caseItem.body_analysis?.snippet || "No text content available.";
 
               return (
@@ -1845,7 +1852,6 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                                 </div>
                               </div>
                               <div className="email-body">
-                                {/* ✅ FIX 3: Display snippet directly. No loading spinner. */}
                                 <div style={{ 
                                     fontFamily: 'monospace', 
                                     whiteSpace: 'pre-wrap', 
@@ -1908,17 +1914,17 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                                 </Badge>
                               </div>
 
-                              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-secondary)' }}>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  fullWidth
-                                  icon={<ExternalLink size={14} />}
-                                  onClick={() => navigate(`/report/${caseItem.originalId}`)}
-                                >
-                                  View Full Report
-                                </Button>
-                              </div>
+                              <div style={{ marginTop: '1rem', paddingTop: '1rem' }}>
+  <Button
+    variant="ghost"
+    size="sm"
+    fullWidth
+    icon={<ExternalLink size={14} />}
+    onClick={() => navigate(`/report/${caseItem.originalId}`)}
+  >
+    View Full Report
+  </Button>
+</div>
                             </div>
                           </div>
                         </div>
@@ -2121,10 +2127,10 @@ const ReportPage = () => {
           borderBottom: '1px solid var(--border-primary)' 
       }}>
         {['overview', 'iocs', 'advanced'].map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={getTabStyle(tab)}>
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-        ))}
+  <button key={tab} onClick={() => setActiveTab(tab)} style={getTabStyle(tab)}>
+    {tab === 'iocs' ? 'IOCs' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+  </button>
+))}
       </div>
 
       {/* 3. TAB CONTENT */}
