@@ -81,8 +81,15 @@ class AnalysisService:
         
         processing_time = time.time() - start_time
         
-        # 7. Save to Database
-        # ✅ FIX 1: Safely get the score (Use .get('score') instead of ['total_score'])
+        # 7. Generate Body Analysis (Snippet & Urgency) [MISSING IN YOUR FILE]
+        body_text = extraction_result.get('body', '')
+        body_analysis = {
+            "snippet": body_text[:500] + "..." if len(body_text) > 500 else body_text,
+            "urgency_detected": self._check_urgency(body_text),
+            "heuristic_indicators": risk_analysis.get('breakdown', {}).get('heuristic_risk', 0) > 0
+        }
+
+        # 8. Save to Database
         final_score = risk_analysis.get('score', 0)
         
         case = self._save_case(
@@ -92,6 +99,7 @@ class AnalysisService:
             attachment_results=attachment_results,
             ml_prediction=ml_prediction,
             risk_analysis=risk_analysis,
+            body_analysis=body_analysis, # Pass the new body analysis
             processing_time=processing_time,
             file_path=file_path,
             final_score=final_score
@@ -103,14 +111,14 @@ class AnalysisService:
             'case_id': case.id,
             'email_id': case.email_id,
             'verdict': risk_analysis.get('verdict', 'UNKNOWN'),
-            # ✅ FIX 2: This was the line causing the crash!
             'risk_score': final_score, 
             'breakdown': risk_analysis.get('breakdown', {}),
             'processing_time': processing_time,
             'extraction': extraction_result,
             'threat_intel': threat_intel_results,
             'attachments': attachment_results,
-            'ml_prediction': ml_prediction
+            'ml_prediction': ml_prediction,
+            'body_analysis': body_analysis
         }
 
     def get_email_content(self, case_id: int) -> Optional[str]:
@@ -147,9 +155,14 @@ class AnalysisService:
                 results.append(self.attachment_analyzer.analyze_attachment(filename, content))
         return results
     
+    def _check_urgency(self, text: str) -> bool:
+        """Simple helper to re-check urgency for UI display"""
+        urgency_words = ['urgent', 'immediate', 'asap', 'action required', 'suspended', 'limited time']
+        return any(w in text.lower() for w in urgency_words)
+
     def _save_case(self, email_id: str, extraction_result: Dict, 
                    threat_intel_results: List, attachment_results: List,
-                   ml_prediction: Dict, risk_analysis: Dict, 
+                   ml_prediction: Dict, risk_analysis: Dict, body_analysis: Dict,
                    processing_time: float, file_path: str, final_score: int) -> PhishingCase:
         
         sender = extraction_result.get('sender', '')
@@ -163,7 +176,10 @@ class AnalysisService:
             subject=extraction_result.get('subject', ''),
             verdict=risk_analysis.get('verdict'),
             risk_score=final_score, 
-            ml_prediction=ml_prediction.get('phishing_probability', 0),
+            
+            # [FIXED] Save the FULL ML dictionary, not just the float score
+            ml_prediction=ml_prediction,
+            
             extracted_ips=extraction_result.get('ips', []),
             extracted_urls=extraction_result.get('urls', []),
             extracted_domains=extraction_result.get('domains', []),
@@ -172,6 +188,10 @@ class AnalysisService:
             attachment_analysis=[self._serialize_attachment(a) for a in attachment_results],
             header_analysis=extraction_result.get('headers', {}),
             breakdown=risk_analysis.get('breakdown', {}),
+            
+            # [FIXED] Save the body analysis (snippet/urgency)
+            body_analysis=body_analysis,
+            
             file_path=file_path,
             processing_time=processing_time,
             processed_at=datetime.utcnow()

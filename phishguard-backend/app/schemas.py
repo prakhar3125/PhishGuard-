@@ -35,18 +35,19 @@ class CaseResponse(BaseModel):
     sender: Optional[str] = None
     subject: Optional[str] = None
     
-    # We include body for the '▼' expand view if needed, 
-    # though usually fetched via /content endpoint now.
     body: Optional[str] = None
     
     verdict: Optional[str] = "UNKNOWN"
     risk_score: int
     
-    # ✅ CRITICAL FIX: The Breakdown Dictionary
-    # This allows the React Frontend to see { "threat_intel": 100, "ml": 50 ... }
     breakdown: Optional[Dict[str, int]] = {}
     
-    ml_prediction: Optional[float] = 0.0
+    # [FIX 2] Changed from float to Dict to allow JSON objects
+    ml_prediction: Optional[Dict[str, Any]] = None
+    
+    # [FIX 3] Added this field so the React Text Snippet works
+    body_analysis: Optional[Dict[str, Any]] = None
+    
     received_time: Optional[datetime] = None
     processed_at: Optional[datetime] = None
     
@@ -62,7 +63,7 @@ class StatisticsResponse(BaseModel):
     recent_cases: List[CaseResponse]
 
 # ==========================================
-# 📥 INPUT MODELS (Optional/Future Use)
+# 📥 INPUT MODELS
 # ==========================================
 
 class EmailSubmission(BaseModel):
@@ -78,8 +79,8 @@ class AnalysisResult(BaseModel):
     case_id: int
     verdict: str
     risk_score: int
-    breakdown: Dict[str, int] # Added here too for consistency
-    ml_prediction: Optional[float]
+    breakdown: Dict[str, int]
+    ml_prediction: Optional[Dict[str, Any]] # Changed to Dict here too
     processing_time: float
     iocs: IOCExtraction
     threat_intel: List[ThreatIntelResult]

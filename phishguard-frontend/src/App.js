@@ -1,3 +1,4 @@
+import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import axios from 'axios';
 import './App.css';
@@ -265,43 +266,69 @@ const formatFileSize = (bytes) => {
 
 /**
  * Format date to readable string
+ * Handles both ISO Strings (API) and Date Objects (State)
  */
-const formatDate = (dateString, includeTime = true) => {
-  if (!dateString) return 'N/A';
-  const date = new Date(dateString);
+const formatDate = (dateInput, includeTime = true) => {
+  if (!dateInput) return 'N/A';
+  
+  let date;
+  
+  // 1. If it's a string, fix the timezone Z issue
+  if (typeof dateInput === 'string') {
+      const normalizedDate = dateInput.endsWith('Z') ? dateInput : dateInput + 'Z';
+      date = new Date(normalizedDate);
+  } 
+  // 2. If it's already a Date object, use it directly
+  else {
+      date = new Date(dateInput);
+  }
+  
+  // Check if date is valid
+  if (isNaN(date.getTime())) return 'Invalid Date';
+
   const options = {
-    year: 'numeric',
-    month: 'short',
+    year: 'numeric', 
+    month: 'short', 
     day: 'numeric',
-    ...(includeTime && {
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    ...(includeTime && { hour: '2-digit', minute: '2-digit' })
   };
+  
   return date.toLocaleDateString('en-US', options);
 };
-
 /**
  * Get relative time string (e.g., "2 hours ago")
  */
-const getRelativeTime = (dateString) => {
-  if (!dateString) return 'Unknown';
-  
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffInSeconds = Math.floor((now - date) / 1000);
-  
-  if (diffInSeconds < 60) return 'Just now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
-  
-  return formatDate(dateString, false);
-};
-
 /**
- * Get verdict badge color and variant
+ * Get relative time string (e.g., "2 hours ago")
  */
+const getRelativeTime = (dateInput) => {
+    if (!dateInput) return 'Unknown';
+    
+    let date;
+    
+    // 1. Handle String input (API response)
+    if (typeof dateInput === 'string') {
+        const normalizedDate = dateInput.endsWith('Z') ? dateInput : dateInput + 'Z';
+        date = new Date(normalizedDate);
+    } 
+    // 2. Handle Date object input (App state / lastFetch)
+    else {
+        date = new Date(dateInput);
+    }
+
+    if (isNaN(date.getTime())) return 'Unknown';
+
+    const now = new Date();
+    const diffInSeconds = Math.floor((now - date) / 1000);
+    
+    if (diffInSeconds < 0) return 'Just now';
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    
+    return formatDate(date, false);
+};
 const getVerdictStyle = (verdict) => {
   const styles = {
     MALICIOUS: { 
@@ -1254,7 +1281,7 @@ const UploadSection = ({ onAnalysisComplete, onNotify }) => {
           <div className="upload-progress">
             <ProgressBar value={progress} showLabel size="lg" animated />
             <p className="upload-progress__text">
-              Analyzing email with AI models... This may take a few moments.
+              Analyzing email for security threats and indicators of compromise...
             </p>
           </div>
         )}
@@ -1326,6 +1353,7 @@ const UploadSection = ({ onAnalysisComplete, onNotify }) => {
  * Advanced Cases Table with sorting, filtering, pagination, export, and delete
  */
 const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
+  const navigate = useNavigate();
   const [sortField, setSortField] = useState(SORT_FIELDS.ID);
   const [sortDirection, setSortDirection] = useState('desc');
   const [filter, setFilter] = useState('all');
@@ -1714,14 +1742,6 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                   )}
                 </div>
               </th>
-              <th onClick={() => handleSort(SORT_FIELDS.RISK_SCORE)} className="cases-table__th--sortable">
-                <div className="cases-table__header-content">
-                  Risk Score
-                  {sortField === SORT_FIELDS.RISK_SCORE && (
-                    <span className="sort-indicator">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                  )}
-                </div>
-              </th>
               <th onClick={() => handleSort(SORT_FIELDS.PROCESSED_AT)} className="cases-table__th--sortable">
                 <div className="cases-table__header-content">
                   Date
@@ -1779,9 +1799,6 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                         {caseItem.verdict}
                       </Badge>
                     </td>
-                    <td className="cases-table__cell cases-table__cell--score">
-                      <ProgressBar value={caseItem.risk_score || 0} showLabel size="md" />
-                    </td>
                     <td className="cases-table__cell">
                       {getRelativeTime(caseItem.processed_at)}
                     </td>
@@ -1808,7 +1825,7 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
 
                   {isExpanded && (
                     <tr className="case-details-row">
-                      <td colSpan="9">
+                      <td colSpan="8">
                         <div className="case-details">
                           <div className="details-grid">
                             <div className="email-preview">
@@ -1907,13 +1924,14 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
 
                               <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-secondary)' }}>
                                 <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  fullWidth
-                                  icon={<ExternalLink size={14} />}
-                                >
-                                  View Full Report
-                                </Button>
+  variant="ghost"
+  size="sm"
+  fullWidth
+  icon={<ExternalLink size={14} />}
+  onClick={() => navigate(`/report/${caseItem.originalId}`)}
+>
+  View Full Report
+</Button>
                               </div>
                             </div>
                           </div>
@@ -2002,14 +2020,436 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
   );
 };
 
+/**
+ * FIXED REPORT PAGE - Matches User's Custom CSS Theme
+ */
+const ReportPage = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [caseData, setCaseData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
+
+  useEffect(() => {
+    const fetchCaseDetails = async () => {
+      try {
+        const response = await api.client.get(`/cases/${id}`);
+        setCaseData(response.data);
+      } catch (err) {
+        setError(err.message || "Failed to load report");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCaseDetails();
+  }, [id]);
+
+  if (loading) return (
+    <div className="app__container" style={{ padding: 'var(--space-8)', textAlign: 'center' }}>
+      <div className="loading-spinner" style={{ margin: '0 auto' }}></div>
+      <p style={{ marginTop: 'var(--space-4)', color: 'var(--text-secondary)' }}>Loading analysis...</p>
+    </div>
+  );
+
+  if (error) return (
+    <div className="app__container">
+        <div className="alert alert--danger">
+            <div className="alert__content">{error}</div>
+        </div>
+        <Button onClick={() => navigate('/')}>Back to Dashboard</Button>
+    </div>
+  );
+
+  if (!caseData) return null;
+
+  const verdictStyle = getVerdictStyle(caseData.verdict);
+
+  // Helper for tab styling
+  const getTabStyle = (tabName) => ({
+    padding: 'var(--space-3) var(--space-4)',
+    background: 'none',
+    border: 'none',
+    borderBottom: activeTab === tabName ? '2px solid var(--primary-500)' : '2px solid transparent',
+    color: activeTab === tabName ? 'var(--text-primary)' : 'var(--text-secondary)',
+    fontWeight: activeTab === tabName ? 'var(--font-weight-bold)' : 'normal',
+    cursor: 'pointer',
+    fontSize: 'var(--font-size-sm)',
+    transition: 'all var(--transition-base)'
+  });
+
+  return (
+    <div className="app__container" style={{ maxWidth: '1200px' }}>
+      
+      {/* 1. HEADER & NAV */}
+      <div style={{ marginBottom: 'var(--space-6)' }}>
+        <Button variant="ghost" onClick={() => navigate('/')} icon={<ChevronLeft size={16} />}>
+          Back to Dashboard
+        </Button>
+      </div>
+
+      <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'flex-start', 
+          marginBottom: 'var(--space-8)', 
+          flexWrap: 'wrap', 
+          gap: 'var(--space-4)' 
+      }}>
+        <div>
+          <h1 style={{ 
+              fontSize: 'var(--font-size-3xl)', 
+              fontWeight: 'var(--font-weight-bold)', 
+              color: 'var(--text-primary)', 
+              marginBottom: 'var(--space-2)' 
+          }}>
+            Analysis Report #{caseData.id}
+          </h1>
+          <div style={{ display: 'flex', gap: 'var(--space-4)', color: 'var(--text-tertiary)', fontSize: 'var(--font-size-sm)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Clock size={14} /> {formatDate(caseData.processed_at)}
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Hash size={14} /> ID: {caseData.email_id || 'N/A'}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ textAlign: 'right' }}>
+           <Badge variant={verdictStyle.variant} style={{ fontSize: 'var(--font-size-base)', padding: 'var(--space-2) var(--space-4)' }}>
+              {verdictStyle.icon}
+              <span style={{ marginLeft: '8px' }}>{caseData.verdict}</span>
+           </Badge>
+           <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>
+             Risk Score: <strong style={{ color: caseData.risk_score > 70 ? 'var(--danger-500)' : 'var(--text-primary)' }}>
+                {caseData.risk_score}/100
+             </strong>
+           </div>
+        </div>
+      </div>
+
+      {/* 2. TABS */}
+      <div style={{ 
+          display: 'flex', 
+          gap: 'var(--space-2)', 
+          marginBottom: 'var(--space-6)', 
+          borderBottom: '1px solid var(--border-primary)' 
+      }}>
+        {['overview', 'iocs', 'advanced'].map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)} style={getTabStyle(tab)}>
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+        ))}
+      </div>
+
+      {/* 3. TAB CONTENT */}
+      
+      {/* === OVERVIEW TAB === */}
+      {activeTab === 'overview' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: 'var(--space-6)' }}>
+
+            <Card>
+                <div className="card__header">
+                    <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Mail size={20}/> Email Details
+                    </h3>
+                </div>
+                <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                    {/* Items using your theme variables for background colors */}
+                    {[
+                        { label: 'Subject', value: caseData.subject },
+                        { label: 'Sender', value: caseData.sender },
+                        { label: 'Received', value: formatDate(caseData.received_time) }
+                    ].map((item, i) => (
+                        <div key={i} style={{ 
+                            padding: 'var(--space-3)', 
+                            backgroundColor: 'var(--bg-subtle)', // Fixed dark mode bg
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid var(--border-secondary)'
+                        }}>
+                            <span style={{ 
+                                display: 'block', 
+                                fontSize: 'var(--font-size-xs)', 
+                                color: 'var(--text-tertiary)', 
+                                textTransform: 'uppercase', 
+                                marginBottom: '4px' 
+                            }}>
+                                {item.label}
+                            </span>
+                            <span style={{ 
+                                color: 'var(--text-primary)', 
+                                fontWeight: '500', 
+                                wordBreak: 'break-word' 
+                            }}>
+                                {item.value}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            </Card>
+
+            {/* Risk Breakdown Card */}
+            <Card>
+                <div className="card__header">
+                    <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Activity size={20}/> Scoring Breakdown
+                    </h3>
+                </div>
+                <div className="card__body">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                        {Object.entries(caseData.breakdown || {}).map(([key, score]) => (
+                            <div key={key} style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                paddingBottom: 'var(--space-2)', 
+                                borderBottom: '1px dashed var(--border-secondary)' 
+                            }}>
+                                <span style={{ textTransform: 'capitalize', color: 'var(--text-secondary)' }}>
+                                    {key.replace('_', ' ')}
+                                </span>
+                                <span style={{ 
+                                    fontWeight: 'bold', 
+                                    color: score > 0 ? 'var(--danger-500)' : 'var(--success-500)' 
+                                }}>
+                                    {score > 0 ? `+${score}` : score}
+                                </span>
+                            </div>
+                        ))}
+                        <div style={{ 
+                            marginTop: 'var(--space-4)', 
+                            paddingTop: 'var(--space-3)', 
+                            borderTop: '2px solid var(--border-primary)', 
+                            display: 'flex', 
+                            justifyContent: 'space-between' 
+                        }}>
+                            <strong style={{ color: 'var(--text-primary)' }}>Total Risk Score</strong>
+                            <strong style={{ color: 'var(--text-primary)' }}>{caseData.risk_score}/100</strong>
+                        </div>
+                    </div>
+                </div>
+            </Card>
+
+            {/* AI Analysis Card */}
+            <Card style={{ gridColumn: '1 / -1' }}>
+                <div className="card__header">
+                    <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Zap size={20}/> AI & Body Analysis
+                    </h3>
+                </div>
+                <div className="card__body">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--space-6)', marginBottom: 'var(--space-6)' }}>
+                        <div>
+                            <h4 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)' }}>ML Model Prediction</h4>
+                            <div style={{ padding: 'var(--space-3)', backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)' }}>
+                                <div style={{ marginBottom: '4px', color: 'var(--text-primary)' }}>
+                                    Is Phishing: <strong>{caseData.ml_prediction?.is_phishing ? 'YES' : 'NO'}</strong>
+                                </div>
+                                <div style={{ color: 'var(--text-secondary)' }}>
+                                    Confidence: <strong>{Math.round((caseData.ml_prediction?.confidence || 0) * 100)}%</strong>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)' }}>Urgency & Tone</h4>
+                            <div style={{ padding: 'var(--space-3)', backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)' }}>
+                                <div style={{ color: 'var(--text-primary)' }}>
+                                    Urgency Detected: <strong>{caseData.body_analysis?.urgency_detected ? 'Yes' : 'No'}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)' }}>Content Snippet</h4>
+                        <div style={{ 
+                            fontFamily: 'monospace', 
+                            backgroundColor: 'var(--bg-base)', // Darker background for code 
+                            padding: 'var(--space-4)', 
+                            borderRadius: 'var(--radius-md)', 
+                            fontSize: 'var(--font-size-sm)',
+                            color: 'var(--text-secondary)',
+                            border: '1px solid var(--border-secondary)'
+                        }}>
+                            {caseData.body_analysis?.snippet || "No snippet available"}
+                        </div>
+                    </div>
+                </div>
+            </Card>
+        </div>
+      )}
+
+      {/* === IOCS TAB === */}
+      {activeTab === 'iocs' && (
+        <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
+            <Card>
+                <div className="card__header">
+                    <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <LinkIcon size={20}/> Extracted URLs & Domains
+                    </h3>
+                </div>
+                <div className="card__body" style={{ padding: 0 }}>
+                    {caseData.iocs?.urls?.length > 0 || caseData.iocs?.domains?.length > 0 ? (
+                        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                            <table className="cases-table">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {caseData.iocs?.urls?.map((url, i) => (
+                                        <tr key={`url-${i}`} className="cases-table__row">
+                                            <td className="cases-table__cell"><Badge variant="neutral">URL</Badge></td>
+                                            <td className="cases-table__cell" style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>{url}</td>
+                                        </tr>
+                                    ))}
+                                    {caseData.iocs?.domains?.map((domain, i) => (
+                                        <tr key={`dom-${i}`} className="cases-table__row">
+                                            <td className="cases-table__cell"><Badge variant="neutral">DOMAIN</Badge></td>
+                                            <td className="cases-table__cell">{domain}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-tertiary)' }}>No URLs found</div>
+                    )}
+                </div>
+            </Card>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'var(--space-6)' }}>
+                <Card>
+                    <div className="card__header">
+                        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Server size={20}/> IP Addresses
+                        </h3>
+                    </div>
+                    <div className="card__body">
+                        {caseData.iocs?.ips?.length > 0 ? (
+                            <ul style={{ listStyle: 'none', padding: 0 }}>
+                                {caseData.iocs.ips.map((ip, i) => (
+                                    <li key={i} style={{ 
+                                        padding: 'var(--space-2) 0', 
+                                        borderBottom: '1px solid var(--border-secondary)',
+                                        color: 'var(--text-primary)'
+                                    }}>{ip}</li>
+                                ))}
+                            </ul>
+                        ) : <p style={{ color: 'var(--text-tertiary)' }}>No IPs found.</p>}
+                    </div>
+                </Card>
+
+                <Card>
+                    <div className="card__header">
+                        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Hash size={20}/> File Hashes
+                        </h3>
+                    </div>
+                    <div className="card__body">
+                        {caseData.iocs?.hashes?.md5?.length > 0 ? (
+                            <ul style={{ listStyle: 'none', padding: 0 }}>
+                                {caseData.iocs.hashes.md5.map((h, i) => (
+                                    <li key={i} style={{ 
+                                        padding: 'var(--space-2) 0', 
+                                        borderBottom: '1px solid var(--border-secondary)', 
+                                        fontFamily: 'monospace',
+                                        color: 'var(--text-secondary)'
+                                    }}>{h}</li>
+                                ))}
+                            </ul>
+                        ) : <p style={{ color: 'var(--text-tertiary)' }}>No hashes found.</p>}
+                    </div>
+                </Card>
+            </div>
+        </div>
+      )}
+
+      {/* === ADVANCED TAB === */}
+      {activeTab === 'advanced' && (
+        <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
+            <Card>
+                <div className="card__header">
+                    <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Globe size={20}/> External Threat Intelligence
+                    </h3>
+                </div>
+                <div className="card__body">
+                    {caseData.threat_intel && Object.keys(caseData.threat_intel).length > 0 ? (
+                        <div style={{ 
+                            backgroundColor: '#1e1e1e', // Force dark background for code
+                            color: '#d4d4d4', 
+                            padding: 'var(--space-4)', 
+                            borderRadius: 'var(--radius-lg)', 
+                            fontFamily: 'monospace',
+                            fontSize: 'var(--font-size-xs)',
+                            overflowX: 'auto'
+                        }}>
+                            <pre style={{ margin: 0 }}>
+                                {JSON.stringify(caseData.threat_intel, null, 2)}
+                            </pre>
+                        </div>
+                    ) : (
+                        <p style={{ color: 'var(--text-secondary)' }}>No matches found in external databases (VirusTotal/AbuseIPDB).</p>
+                    )}
+                </div>
+            </Card>
+
+            <Card>
+                <div className="card__header">
+                    <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <File size={20}/> Attachment Analysis
+                    </h3>
+                </div>
+                <div className="card__body">
+                    {caseData.attachments && caseData.attachments.length > 0 ? (
+                        caseData.attachments.map((att, i) => (
+                            <div key={i} style={{ 
+                                border: '1px solid var(--border-primary)', 
+                                borderRadius: 'var(--radius-lg)', 
+                                padding: 'var(--space-4)', 
+                                marginBottom: 'var(--space-4)',
+                                backgroundColor: 'var(--bg-subtle)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
+                                    <strong style={{ color: 'var(--text-primary)' }}>{att.filename}</strong>
+                                    <Badge variant={att.risk_score > 0 ? 'danger' : 'success'}>Score: {att.risk_score}</Badge>
+                                </div>
+                                <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>
+                                    <p>Type: {att.file_type}</p>
+                                    <p>MD5: <span style={{ fontFamily: 'monospace' }}>{att.md5}</span></p>
+                                    {att.findings && att.findings.length > 0 && (
+                                        <div style={{ marginTop: 'var(--space-2)' }}>
+                                            <strong>Findings:</strong>
+                                            <ul style={{ paddingLeft: '20px', margin: '5px 0' }}>
+                                                {att.findings.map((f, idx) => (
+                                                    <li key={idx} style={{ color: 'var(--danger-500)' }}>{f}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No attachments found.</p>
+                    )}
+                </div>
+            </Card>
+        </div>
+      )}
+
+    </div>
+  );
+};
 // ============================================================================
 // MAIN APP COMPONENT
 // ============================================================================
-
-function App() {
-  const { theme, toggleTheme } = useTheme();
+const Dashboard = () => {
+  // Pass theme props if needed, or use the hook inside Header
+  const { theme, toggleTheme } = useTheme(); 
   const { stats, loading, error, refetch, lastFetch } = useDashboardStats();
-  const { notifications, addNotification, removeNotification, success, error: notifyError, warning, info } = useNotifications();
+  const { notifications, addNotification, removeNotification, success, error: notifyError } = useNotifications();
   const [showScrollTop, setShowScrollTop] = useState(false);
   const windowSize = useWindowSize();
 
@@ -2024,60 +2464,27 @@ function App() {
   useKeyboardShortcuts([
     {
       keys: ['r'],
-      action: () => {
-        refetch();
-        // Notification will be shown by the useEffect above
-      },
+      action: () => refetch(),
       requireCtrl: true
     },
     {
       keys: ['d'],
       action: toggleTheme,
       requireCtrl: true
-    },
-    {
-      keys: ['k'],
-      action: () => {
-        const searchInput = document.querySelector('input[type="text"]');
-        searchInput?.focus();
-      },
-      requireCtrl: true
-    },
-    {
-      keys: ['escape'],
-      action: () => {
-        const searchInput = document.querySelector('input[type="text"]');
-        if (document.activeElement === searchInput) {
-          searchInput.blur();
-        }
-      },
-      requireCtrl: false
     }
   ]);
 
-  // Scroll to top button visibility
+  // Scroll to top logic
   useEffect(() => {
-    const handleScroll = () => {
-      setShowScrollTop(window.scrollY > 400);
-    };
-
+    const handleScroll = () => setShowScrollTop(window.scrollY > 400);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Auto-refresh notification (disabled to prevent spam)
-  const lastFetchRef = useRef(null);
-  useEffect(() => {
-    // Notification disabled - was showing too frequently
-    lastFetchRef.current = lastFetch ? new Date(lastFetch) : null;
-  }, [lastFetch, loading]);
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
   return (
-    <div className="app">
+    <>
       <div className="app__container">
         <Header
           onThemeToggle={toggleTheme}
@@ -2088,20 +2495,11 @@ function App() {
 
         {error && (
           <div className="app__error" role="alert">
-            <span className="app__error-icon">
-              <AlertTriangle size={20} />
-            </span>
+            <span className="app__error-icon"><AlertTriangle size={20} /></span>
             <div style={{ flex: 1 }}>
-              <p className="app__error-message">
-                <strong>Connection Error:</strong> {error}
-              </p>
-              <p style={{ fontSize: '0.75rem', marginTop: '4px', color: 'var(--text-secondary)' }}>
-                Please check your network connection or backend service.
-              </p>
+              <p className="app__error-message"><strong>Connection Error:</strong> {error}</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={refetch} icon={<RefreshCw size={16} />}>
-              Retry
-            </Button>
+            <Button variant="ghost" size="sm" onClick={refetch} icon={<RefreshCw size={16} />}>Retry</Button>
           </div>
         )}
 
@@ -2120,47 +2518,40 @@ function App() {
         />
 
         {showScrollTop && (
-          <button
-            className="scroll-to-top"
-            onClick={scrollToTop}
-            aria-label="Scroll to top"
-          >
+          <button className="scroll-to-top" onClick={scrollToTop} aria-label="Scroll to top">
             <ArrowUp size={24} />
           </button>
         )}
 
         <footer className="app__footer">
-          <p className="app__footer-text">
-            <strong>PhishGuard Pro</strong> © 2025 • Advanced Email Security Analysis
-            {!windowSize.isMobile && (
-              <>
-                {' • '}
-                <kbd style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'var(--bg-surface)', borderRadius: '4px', border: '1px solid var(--border-primary)' }}>
-                  Ctrl+R
-                </kbd> Refresh
-                {' • '}
-                <kbd style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'var(--bg-surface)', borderRadius: '4px', border: '1px solid var(--border-primary)' }}>
-                  Ctrl+D
-                </kbd> Theme
-                {' • '}
-                <kbd style={{ fontSize: '0.7rem', padding: '2px 6px', background: 'var(--bg-surface)', borderRadius: '4px', border: '1px solid var(--border-primary)' }}>
-                  Ctrl+K
-                </kbd> Search
-              </>
-            )}
-          </p>
-          <p style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)', marginTop: '0.5rem', textAlign: 'center' }}>
-            Powered by AI/ML • {windowSize.isMobile ? 'Mobile' : windowSize.isTablet ? 'Tablet' : 'Desktop'} View
-            {stats.total_processed > 0 && ` • ${stats.total_processed} emails analyzed`}
-          </p>
+          <p className="app__footer-text"><strong>PhishGuard Pro</strong> © 2025</p>
         </footer>
       </div>
 
-      <ToastContainer
-        notifications={notifications}
-        onClose={removeNotification}
-      />
-    </div>
+      <ToastContainer notifications={notifications} onClose={removeNotification} />
+    </>
+  );
+}
+
+
+// ============================================================================
+// 3. NEW MAIN ENTRY POINT: APP (Handles Routing)
+// ============================================================================
+function App() {
+  const { theme } = useTheme(); // Get theme here to apply to the main div wrapper
+
+  return (
+    <Router>
+      <div className="app" data-theme={theme}>
+        <Routes>
+          {/* If path is "/", show the Dashboard */}
+          <Route path="/" element={<Dashboard />} />
+          
+          {/* If path is "/report/123", show the ReportPage */}
+          <Route path="/report/:id" element={<ReportPage />} />
+        </Routes>
+      </div>
+    </Router>
   );
 }
 
