@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     ABUSEIPDB_API_KEY: Optional[str] = None
     URLHAUS_API_KEY: Optional[str] = None
     
+    # ✅ ADDED: Perplexity API Key
+    PERPLEXITY_API_KEY: Optional[str] = None
+    
     # Analysis Settings
     MAX_EMAIL_SIZE_MB: int = 25
     MAX_ATTACHMENT_SIZE_MB: int = 10
@@ -26,7 +29,7 @@ class Settings(BaseSettings):
     MALICIOUS_THRESHOLD: int = 70
     SUSPICIOUS_THRESHOLD: int = 40
     
-    # ✅ FIX: Point to the folder in the root directory
+    # ML Model
     ML_MODEL_PATH: str = os.path.join(os.getcwd(), "my_local_model")
     ML_VECTORIZER_PATH: str = "./models/vectorizer.pkl"
     

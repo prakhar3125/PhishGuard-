@@ -2011,17 +2011,23 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
     </Card>
   );
 };
+
 /**
  * FIXED REPORT PAGE - Matches User's Custom CSS Theme
  */
 const ReportPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  
+  // 1. State Definitions
   const [caseData, setCaseData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [aiSummary, setAiSummary] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
+  // 2. Fetch Data Effect
   useEffect(() => {
     const fetchCaseDetails = async () => {
       try {
@@ -2036,6 +2042,28 @@ const ReportPage = () => {
     fetchCaseDetails();
   }, [id]);
 
+  // 3. AI Summary Function (MOVED INSIDE COMPONENT)
+  const handleGenerateSummary = async () => {
+    if (aiSummary) return; // Don't fetch if already loaded
+    setAiLoading(true);
+    try {
+      const response = await api.client.post('/ai-summary', {
+        subject: caseData.subject,
+        sender: caseData.sender,
+        risk_score: caseData.risk_score,
+        verdict: caseData.verdict,
+        body: caseData.body_analysis?.snippet || ""
+      });
+      setAiSummary(response.data);
+    } catch (error) {
+      console.error("Failed to generate AI summary:", error);
+      // Optional: addNotification("Failed to generate summary", "error");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // 4. Loading/Error States
   if (loading) return (
     <div className="app__container" style={{ padding: 'var(--space-8)', textAlign: 'center' }}>
       <div className="loading-spinner" style={{ margin: '0 auto' }}></div>
@@ -2108,29 +2136,44 @@ const ReportPage = () => {
 
         <div style={{ textAlign: 'right' }}>
            <Badge variant={verdictStyle.variant} style={{ fontSize: 'var(--font-size-base)', padding: 'var(--space-2) var(--space-4)' }}>
-              {verdictStyle.icon}
-              <span style={{ marginLeft: '8px' }}>{caseData.verdict}</span>
+             {verdictStyle.icon}
+             <span style={{ marginLeft: '8px' }}>{caseData.verdict}</span>
            </Badge>
            <div style={{ marginTop: 'var(--space-2)', fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>
              Risk Score: <strong style={{ color: caseData.risk_score > 70 ? 'var(--danger-500)' : 'var(--text-primary)' }}>
-                {caseData.risk_score}/100
+               {caseData.risk_score}/100
              </strong>
            </div>
         </div>
       </div>
 
-      {/* 2. TABS */}
+      {/* 2. TABS & AI ACTION */}
       <div style={{ 
           display: 'flex', 
-          gap: 'var(--space-2)', 
+          justifyContent: 'space-between', // Push button to the right
+          alignItems: 'center',
           marginBottom: 'var(--space-6)', 
           borderBottom: '1px solid var(--border-primary)' 
       }}>
-        {['overview', 'iocs', 'advanced'].map(tab => (
-  <button key={tab} onClick={() => setActiveTab(tab)} style={getTabStyle(tab)}>
-    {tab === 'iocs' ? 'IOCs' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-  </button>
-))}
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          {['overview', 'iocs', 'advanced'].map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)} style={getTabStyle(tab)}>
+                  {tab === 'iocs' ? 'IOCs' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+          ))}
+        </div>
+
+        <Button 
+          size="sm" 
+          variant="secondary" // Or a distinct color like 'accent'
+          icon={<Zap size={14} />} 
+          onClick={handleGenerateSummary}
+          loading={aiLoading}
+          disabled={aiLoading}
+          style={{ marginBottom: '8px' }} // Align with tabs
+        >
+          AI Analysis
+        </Button>
       </div>
 
       {/* 3. TAB CONTENT */}
@@ -2138,6 +2181,32 @@ const ReportPage = () => {
       {/* === OVERVIEW TAB === */}
       {activeTab === 'overview' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: 'var(--space-6)' }}>
+
+          {/* AI SUMMARY CARD */}
+          {aiSummary && (
+            <Card style={{ gridColumn: '1 / -1', borderLeft: '4px solid var(--primary-500)' }}>
+                <div className="card__header">
+                <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Zap size={20} className="text-primary-500" /> Executive Threat Summary
+                </h3>
+                </div>
+                <div className="card__body">
+                <p style={{ marginBottom: '1rem', fontSize: '1rem', lineHeight: '1.6' }}>
+                    {aiSummary.summary}
+                </p>
+                <div>
+                    <h4 style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                    Recommended Actions:
+                    </h4>
+                    <ul style={{ paddingLeft: '1.5rem', margin: 0 }}>
+                    {aiSummary.actions?.map((action, idx) => (
+                        <li key={idx} style={{ marginBottom: '0.25rem' }}>{action}</li>
+                    ))}
+                    </ul>
+                </div>
+                </div>
+            </Card>
+            )}
 
             <Card>
                 <div className="card__header">
@@ -2219,7 +2288,7 @@ const ReportPage = () => {
                     </div>
                 </div>
             </Card>
-
+            
             {/* AI Analysis Card */}
             <Card style={{ gridColumn: '1 / -1' }}>
                 <div className="card__header">
@@ -2433,6 +2502,8 @@ const ReportPage = () => {
     </div>
   );
 };
+
+
 // ============================================================================
 // MAIN APP COMPONENT
 // ============================================================================
