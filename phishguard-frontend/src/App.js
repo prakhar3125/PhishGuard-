@@ -1350,7 +1350,7 @@ const UploadSection = ({ onAnalysisComplete, onNotify }) => {
 };
 
 /**
- * Advanced Cases Table with sorting, filtering, pagination, export, and delete
+ * Advanced Cases Table - FIXED (Instant Expansion, No Buffering)
  */
 const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
   const navigate = useNavigate();
@@ -1359,29 +1359,20 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRowId, setExpandedRowId] = useState(null);
-  const [emailContent, setEmailContent] = useState({});
-  const [loadingContent, setLoadingContent] = useState(false);
+  
+  // REMOVED: Unnecessary loading states that caused the buffer
+  
   const [selectedCases, setSelectedCases] = useState(new Set());
   const [showFilters, setShowFilters] = useState(false);
   const [dateFilter, setDateFilter] = useState('all');
   const [deletingCases, setDeletingCases] = useState(new Set());
 
-  const toggleRow = async (id) => {
+  // ✅ FIX 1: Instant toggle. No "await" or API calls here.
+  const toggleRow = (id) => {
     if (expandedRowId === id) {
       setExpandedRowId(null);
-      return;
-    }
-
-    setExpandedRowId(id);
-
-    if (!emailContent[id]) {
-      setLoadingContent(true);
-      const { data } = await api.fetchEmailContent(id);
-      setEmailContent(prev => ({
-        ...prev,
-        [id]: data || "Unable to load email content."
-      }));
-      setLoadingContent(false);
+    } else {
+      setExpandedRowId(id);
     }
   };
 
@@ -1420,7 +1411,6 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
 
     onNotify?.('Exporting cases...', NOTIFICATION_TYPES.INFO, 2000);
     
-    // Create CSV manually since API endpoint may not exist
     try {
       const casesToExport = sortedCases.filter(c => selectedCases.has(c.id));
       const csvContent = [
@@ -1465,8 +1455,6 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
         setSelectedCases(new Set());
         setDeletingCases(new Set());
         onNotify?.(`Successfully deleted ${caseIdsToDelete.length} case(s)!`, NOTIFICATION_TYPES.SUCCESS);
-        
-        // Trigger refresh to update the UI
         onCasesUpdate?.();
       } else {
         setDeletingCases(new Set());
@@ -1492,15 +1480,12 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
       
       if (success) {
         setDeletingCases(new Set());
-        // Remove from selected if it was selected
         if (selectedCases.has(caseId)) {
           const newSelected = new Set(selectedCases);
           newSelected.delete(caseId);
           setSelectedCases(newSelected);
         }
         onNotify?.('Case deleted successfully!', NOTIFICATION_TYPES.SUCCESS);
-        
-        // Trigger refresh to update the UI
         onCasesUpdate?.();
       } else {
         setDeletingCases(new Set());
@@ -1559,11 +1544,10 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
       return aVal < bVal ? 1 : -1;
     });
 
-    // Renumber IDs sequentially starting from 1
     return sorted.map((caseItem, index) => ({
       ...caseItem,
-      displayId: index + 1, // Add sequential display ID
-      originalId: caseItem.id // Keep original ID for API calls
+      displayId: index + 1, 
+      originalId: caseItem.id 
     }));
   }, [filteredCases, sortField, sortDirection]);
 
@@ -1590,7 +1574,7 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
   const handleCopyContent = async (content) => {
     const success = await copyToClipboard(content);
     if (success) {
-      onNotify?.('Content copied to clipboard!', NOTIFICATION_TYPES.SUCCESS, 2000);
+      onNotify?.('Copied snippet to clipboard!', NOTIFICATION_TYPES.SUCCESS, 1000);
     } else {
       onNotify?.('Failed to copy content', NOTIFICATION_TYPES.ERROR);
     }
@@ -1756,10 +1740,13 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
           <tbody>
             {currentItems.map((caseItem) => {
               const verdictStyle = getVerdictStyle(caseItem.verdict);
-              const isExpanded = expandedRowId === caseItem.originalId; // Use originalId for expansion
-              const isSelected = selectedCases.has(caseItem.originalId); // Use originalId for selection
-              const isDeleting = deletingCases.has(caseItem.originalId); // Use originalId for deletion
+              const isExpanded = expandedRowId === caseItem.originalId;
+              const isSelected = selectedCases.has(caseItem.originalId);
+              const isDeleting = deletingCases.has(caseItem.originalId);
               const scores = caseItem.breakdown || {};
+              
+              // ✅ FIX 2: Use the snippet already in memory. This is instant.
+              const snippet = caseItem.body_analysis?.snippet || "No text content available.";
 
               return (
                 <React.Fragment key={caseItem.originalId}>
@@ -1771,7 +1758,7 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                       <input
                         type="checkbox"
                         checked={isSelected}
-                        onChange={() => handleSelectCase(caseItem.originalId)} // Use originalId
+                        onChange={() => handleSelectCase(caseItem.originalId)}
                         onClick={(e) => e.stopPropagation()}
                         aria-label={`Select case ${caseItem.displayId}`}
                       />
@@ -1779,7 +1766,7 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                     <td className="cases-table__cell">
                       <button
                         className={`toggle-btn ${isExpanded ? 'toggle-btn--expanded' : ''}`}
-                        onClick={() => toggleRow(caseItem.originalId)} // Use originalId
+                        onClick={() => toggleRow(caseItem.originalId)}
                         aria-label="Toggle details"
                       >
                         <ChevronDown size={16} />
@@ -1809,7 +1796,7 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                           size="xs"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDeleteSingle(caseItem.originalId); // Use originalId for deletion
+                            handleDeleteSingle(caseItem.originalId);
                           }}
                           disabled={isDeleting}
                           icon={<Trash2 size={14} />}
@@ -1832,12 +1819,12 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                               <div className="email-preview__header">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                                   <h4 style={{ fontSize: '0.875rem', fontWeight: '600', margin: 0 }}>
-                                    Email Content
+                                    Email Snippet
                                   </h4>
                                   <Button
                                     variant="ghost"
                                     size="xs"
-                                    onClick={() => handleCopyContent(emailContent[caseItem.originalId])} // Use originalId
+                                    onClick={() => handleCopyContent(snippet)}
                                     icon={<Copy size={14} />}
                                   >
                                     Copy
@@ -1858,16 +1845,15 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                                 </div>
                               </div>
                               <div className="email-body">
-                                {loadingContent && !emailContent[caseItem.originalId] ? ( // Use originalId
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <Skeleton width="100%" height="16px" />
-                                    <Skeleton width="90%" height="16px" />
-                                    <Skeleton width="95%" height="16px" />
-                                    <Skeleton width="85%" height="16px" />
-                                  </div>
-                                ) : (
-                                  emailContent[caseItem.originalId] || "No content available." // Use originalId
-                                )}
+                                {/* ✅ FIX 3: Display snippet directly. No loading spinner. */}
+                                <div style={{ 
+                                    fontFamily: 'monospace', 
+                                    whiteSpace: 'pre-wrap', 
+                                    fontSize: '0.9rem',
+                                    color: 'var(--text-secondary)'
+                                }}>
+                                    {snippet}
+                                </div>
                               </div>
                             </div>
 
@@ -1924,14 +1910,14 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
 
                               <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-secondary)' }}>
                                 <Button
-  variant="ghost"
-  size="sm"
-  fullWidth
-  icon={<ExternalLink size={14} />}
-  onClick={() => navigate(`/report/${caseItem.originalId}`)}
->
-  View Full Report
-</Button>
+                                  variant="ghost"
+                                  size="sm"
+                                  fullWidth
+                                  icon={<ExternalLink size={14} />}
+                                  onClick={() => navigate(`/report/${caseItem.originalId}`)}
+                                >
+                                  View Full Report
+                                </Button>
                               </div>
                             </div>
                           </div>
@@ -2019,7 +2005,6 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
     </Card>
   );
 };
-
 /**
  * FIXED REPORT PAGE - Matches User's Custom CSS Theme
  */

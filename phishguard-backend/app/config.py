@@ -1,3 +1,4 @@
+import os
 from pydantic_settings import BaseSettings
 from typing import Optional
 
@@ -9,10 +10,9 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # MySQL Database
-    # Remove the default string. Let Pydantic scream if it's missing from .env
     DATABASE_URL: str 
     
-    # Threat Intelligence API Keys (Optional allows None, but tries to load from env)
+    # Threat Intelligence API Keys
     VIRUSTOTAL_API_KEY: Optional[str] = None
     ABUSEIPDB_API_KEY: Optional[str] = None
     URLHAUS_API_KEY: Optional[str] = None
@@ -26,13 +26,12 @@ class Settings(BaseSettings):
     MALICIOUS_THRESHOLD: int = 70
     SUSPICIOUS_THRESHOLD: int = 40
     
-    # ML Model
-    ML_MODEL_PATH: str = "./models/phishing_model.pkl"
+    # ✅ FIX: Point to the folder in the root directory
+    ML_MODEL_PATH: str = os.path.join(os.getcwd(), "my_local_model")
     ML_VECTORIZER_PATH: str = "./models/vectorizer.pkl"
     
     class Config:
         env_file = ".env"
-        # This is important! It allows extra variables in .env without crashing
         extra = "ignore" 
         case_sensitive = True
 
