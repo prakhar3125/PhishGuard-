@@ -1,5 +1,7 @@
 # Backend environment variables
 phishguard-backend/.env
+.env
+*.env
 
 # Local ML model directory
 phishguard-backend/my_local_model/
