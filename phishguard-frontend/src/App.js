@@ -93,6 +93,71 @@ const NOTIFICATION_TYPES = {
 };
 
 // ============================================================================
+// SOC TOOLKIT - THREAT INTELLIGENCE SOURCES
+// ============================================================================
+
+const IOC_SOURCES = {
+  ip: [
+    {name:"VirusTotal", url:"https://www.virustotal.com/gui/ip-address/{data}", logo: "virustotal.com"},
+    {name:"AbuseIPDB", url:"https://www.abuseipdb.com/check/{data}", logo: "abuseipdb.com"},
+    {name:"Talos", url:"https://talosintelligence.com/reputation_center/lookup?search={data}", logo: "talosintelligence.com"},
+    {name:"IBM X-Force", url:"https://exchange.xforce.ibmcloud.com/ip/{data}", logo: "exchange.xforce.ibmcloud.com"},
+    {name:"AlienVault OTX", url:"https://otx.alienvault.com/indicator/ip/{data}", logo: "otx.alienvault.com"},
+    {name:"Shodan", url:"https://www.shodan.io/search?query={data}", logo: "shodan.io"},
+    {name:"Censys", url:"https://search.censys.io/hosts/{data}", logo: "search.censys.io"},
+    {name:"GreyNoise", url:"https://www.greynoise.io/viz/ip/{data}", logo: "greynoise.io"},
+  ],
+  domain: [
+    {name:"VirusTotal", url:"https://www.virustotal.com/gui/domain/{data}", logo: "virustotal.com"},
+    {name:"Talos", url:"https://talosintelligence.com/reputation_center/lookup?search={data}", logo: "talosintelligence.com"},
+    {name:"URLScan", url:"https://urlscan.io/search/#{data}", logo: "urlscan.io"},
+    {name:"URLVoid", url:"https://urlvoid.com/scan/{data}/", logo: "urlvoid.com"},
+    {name:"WHOIS", url:"https://www.whois.com/whois/{data}", logo: "whois.com"},
+    {name:"SecurityTrails", url:"https://securitytrails.com/domain/{data}", logo: "securitytrails.com"},
+  ],
+  url: [
+    {name:"VirusTotal", url:"https://www.virustotal.com/gui/url/{data}", logo: "virustotal.com", needsHash: true},
+    {name:"URLScan", url:"https://urlscan.io/search/#{data}", logo: "urlscan.io"},
+    {name:"URLVoid", url:"https://urlvoid.com/scan/{data}/", logo: "urlvoid.com", usesDomain: true},
+    {name:"URLHaus", url:"https://urlhaus.abuse.ch/browse.php?search={data}", logo: "urlhaus.abuse.ch"},
+  ],
+  email: [
+    {name:"Have I Been Pwned", url:"https://haveibeenpwned.com/unifiedsearch/{data}", logo: "haveibeenpwned.com"},
+  ],
+  hash: [
+    {name:"VirusTotal", url:"https://www.virustotal.com/gui/file/{data}", logo: "virustotal.com"},
+    {name:"Hybrid-Analysis", url:"https://www.hybrid-analysis.com/sample/{data}", logo: "hybrid-analysis.com"},
+    {name:"MalShare", url:"https://malshare.com/sample.php?action=detail&hash={data}", logo: "malshare.com"},
+  ]
+};
+
+// Helper function to detect IOC type
+const detectIOCType = (value) => {
+  if (/^[a-fA-F0-9]{32,128}$/.test(value)) return 'hash';
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'email';
+  if (/^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/.test(value)) return 'ip';
+  if (/^https?:\/\//.test(value)) return 'url';
+  if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)) return 'domain';
+  return 'unknown';
+};
+
+// Helper to extract domain from URL
+const extractDomainFromURL = (url) => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+};
+
+// Helper to generate SHA256 hash (for URL lookups that need it)
+const sha256Hash = async (str) => {
+  const buffer = new TextEncoder().encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+// ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
 
@@ -2013,11 +2078,129 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
 };
 
 /**
+ * IOC Lookup Dropdown Component
+ */
+const IOCLookupDropdown = ({ ioc, type, onNotify }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLookup = async (source) => {
+    let data = ioc;
+    
+    // Handle special cases
+    if (source.usesDomain && type === 'url') {
+      data = extractDomainFromURL(ioc);
+    }
+    
+    if (source.needsHash && type === 'url') {
+      data = await sha256Hash(ioc);
+    }
+    
+    const url = source.url.replace('{data}', encodeURIComponent(data));
+    window.open(url, '_blank', 'noopener,noreferrer');
+    
+    onNotify?.(`Opening ${source.name} for lookup`, NOTIFICATION_TYPES.INFO, 2000);
+    setIsOpen(false);
+  };
+
+  const sources = IOC_SOURCES[type] || [];
+
+  if (sources.length === 0) return null;
+
+  return (
+    <div className="ioc-lookup-dropdown" ref={dropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
+      <button
+        className="btn btn--xs btn--secondary"
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '4px',
+          padding: 'var(--space-1) var(--space-3)'
+        }}
+      >
+        <Globe size={14} />
+        Lookup
+        <ChevronDown size={12} style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+      </button>
+
+      {isOpen && (
+        <div
+          className="ioc-lookup-menu"
+          style={{
+            position: 'absolute',
+            top: '100%',
+            right: 0,
+            marginTop: 'var(--space-1)',
+            minWidth: '220px',
+            maxHeight: '320px',
+            overflowY: 'auto',
+            backgroundColor: 'var(--bg-elevated)',
+            border: '1px solid var(--border-primary)',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: 'var(--shadow-xl)',
+            padding: 'var(--space-2)',
+            zIndex: 1000,
+            animation: 'slideDown 0.2s ease-out'
+          }}
+        >
+          {sources.map((source, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleLookup(source)}
+              className="ioc-lookup-item"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-3)',
+                width: '100%',
+                padding: 'var(--space-2) var(--space-3)',
+                border: 'none',
+                background: 'transparent',
+                borderRadius: 'var(--radius-md)',
+                cursor: 'pointer',
+                transition: 'background-color var(--transition-fast)',
+                textAlign: 'left',
+                fontSize: 'var(--font-size-sm)',
+                color: 'var(--text-primary)'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-overlay)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            >
+              <img
+                src={`https://www.google.com/s2/favicons?domain=${source.logo}&sz=32`}
+                alt={source.name}
+                style={{ width: '16px', height: '16px', flexShrink: 0 }}
+                onError={(e) => e.target.style.display = 'none'}
+              />
+              <span style={{ flex: 1 }}>{source.name}</span>
+              <ExternalLink size={12} style={{ color: 'var(--text-tertiary)' }} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
  * FIXED REPORT PAGE - Matches User's Custom CSS Theme
  */
 const ReportPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { notifications, addNotification, removeNotification } = useNotifications(); // ADD THIS
   
   // 1. State Definitions
   const [caseData, setCaseData] = useState(null);
@@ -2098,6 +2281,7 @@ const ReportPage = () => {
   });
 
   return (
+    <>
     <div className="app__container" style={{ maxWidth: '1200px' }}>
       
       {/* 1. HEADER & NAV */}
@@ -2338,92 +2522,252 @@ const ReportPage = () => {
       )}
 
       {/* === IOCS TAB === */}
-      {activeTab === 'iocs' && (
-        <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
-            <Card>
-                <div className="card__header">
-                    <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <LinkIcon size={20}/> Extracted URLs & Domains
-                    </h3>
-                </div>
-                <div className="card__body" style={{ padding: 0 }}>
-                    {caseData.iocs?.urls?.length > 0 || caseData.iocs?.domains?.length > 0 ? (
-                        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                            <table className="cases-table">
-                                <thead>
-                                    <tr>
-                                        <th>Type</th>
-                                        <th>Value</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {caseData.iocs?.urls?.map((url, i) => (
-                                        <tr key={`url-${i}`} className="cases-table__row">
-                                            <td className="cases-table__cell"><Badge variant="neutral">URL</Badge></td>
-                                            <td className="cases-table__cell" style={{ wordBreak: 'break-all', whiteSpace: 'normal' }}>{url}</td>
-                                        </tr>
-                                    ))}
-                                    {caseData.iocs?.domains?.map((domain, i) => (
-                                        <tr key={`dom-${i}`} className="cases-table__row">
-                                            <td className="cases-table__cell"><Badge variant="neutral">DOMAIN</Badge></td>
-                                            <td className="cases-table__cell">{domain}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+      {/* === IOCS TAB === */}
+{activeTab === 'iocs' && (
+  <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
+    
+    {/* URLs & Domains Table */}
+    <Card>
+      <div className="card__header">
+        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <LinkIcon size={20}/> URLs & Domains
+        </h3>
+      </div>
+      <div className="card__body" style={{ padding: 0 }}>
+        {(caseData.iocs?.urls?.length > 0 || caseData.iocs?.domains?.length > 0) ? (
+          <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            <table className="cases-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+              <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-surface)', zIndex: 10 }}>
+                <tr>
+                  <th style={{ width: '100px' }}>Type</th>
+                  <th>Value</th>
+                  <th style={{ width: '120px', textAlign: 'right', paddingRight: 'var(--space-6)' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {caseData.iocs?.urls?.map((url, i) => {
+                  const iocType = detectIOCType(url);
+                  return (
+                    <tr key={`url-${i}`} className="cases-table__row">
+                      <td className="cases-table__cell">
+                        <Badge variant="info" icon={<LinkIcon size={12} />}>
+                          {iocType.toUpperCase()}
+                        </Badge>
+                      </td>
+                      <td className="cases-table__cell" style={{ 
+                        wordBreak: 'break-all', 
+                        whiteSpace: 'normal',
+                        fontFamily: 'monospace',
+                        fontSize: 'var(--font-size-xs)'
+                      }}>
+                        {url}
+                      </td>
+                      <td className="cases-table__cell" style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+                          <Tooltip content="Copy to clipboard">
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              icon={<Copy size={14} />}
+                              onClick={() => {
+                                copyToClipboard(url);
+                                addNotification?.('Copied to clipboard!', NOTIFICATION_TYPES.SUCCESS, 1500);
+                              }}
+                            />
+                          </Tooltip>
+                          <IOCLookupDropdown 
+                            ioc={url} 
+                            type={iocType}
+                            onNotify={addNotification}
+                          />
                         </div>
-                    ) : (
-                        <div style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-tertiary)' }}>No URLs found</div>
-                    )}
-                </div>
-            </Card>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {caseData.iocs?.domains?.map((domain, i) => (
+                  <tr key={`dom-${i}`} className="cases-table__row">
+                    <td className="cases-table__cell">
+                      <Badge variant="neutral" icon={<Globe size={12} />}>
+                        DOMAIN
+                      </Badge>
+                    </td>
+                    <td className="cases-table__cell" style={{ 
+                      fontFamily: 'monospace',
+                      fontSize: 'var(--font-size-xs)'
+                    }}>
+                      {domain}
+                    </td>
+                    <td className="cases-table__cell" style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+                        <Tooltip content="Copy to clipboard">
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            icon={<Copy size={14} />}
+                            onClick={() => {
+                              copyToClipboard(domain);
+                              addNotification?.('Copied to clipboard!', NOTIFICATION_TYPES.SUCCESS, 1500);
+                            }}
+                          />
+                        </Tooltip>
+                        <IOCLookupDropdown 
+                          ioc={domain} 
+                          type="domain"
+                          onNotify={addNotification}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div style={{ padding: 'var(--space-12)', textAlign: 'center' }}>
+            <EmptyState
+              icon={<LinkIcon size={48} />}
+              title="No URLs or Domains Found"
+              description="This email does not contain any extracted URLs or domains."
+            />
+          </div>
+        )}
+      </div>
+    </Card>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'var(--space-6)' }}>
-                <Card>
-                    <div className="card__header">
-                        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Server size={20}/> IP Addresses
-                        </h3>
-                    </div>
-                    <div className="card__body">
-                        {caseData.iocs?.ips?.length > 0 ? (
-                            <ul style={{ listStyle: 'none', padding: 0 }}>
-                                {caseData.iocs.ips.map((ip, i) => (
-                                    <li key={i} style={{ 
-                                        padding: 'var(--space-2) 0', 
-                                        borderBottom: '1px solid var(--border-secondary)',
-                                        color: 'var(--text-primary)'
-                                    }}>{ip}</li>
-                                ))}
-                            </ul>
-                        ) : <p style={{ color: 'var(--text-tertiary)' }}>No IPs found.</p>}
-                    </div>
-                </Card>
-
-                <Card>
-                    <div className="card__header">
-                        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Hash size={20}/> File Hashes
-                        </h3>
-                    </div>
-                    <div className="card__body">
-                        {caseData.iocs?.hashes?.md5?.length > 0 ? (
-                            <ul style={{ listStyle: 'none', padding: 0 }}>
-                                {caseData.iocs.hashes.md5.map((h, i) => (
-                                    <li key={i} style={{ 
-                                        padding: 'var(--space-2) 0', 
-                                        borderBottom: '1px solid var(--border-secondary)', 
-                                        fontFamily: 'monospace',
-                                        color: 'var(--text-secondary)'
-                                    }}>{h}</li>
-                                ))}
-                            </ul>
-                        ) : <p style={{ color: 'var(--text-tertiary)' }}>No hashes found.</p>}
-                    </div>
-                </Card>
-            </div>
+    {/* IP Addresses & File Hashes Grid */}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: 'var(--space-6)' }}>
+      
+      {/* IP Addresses Card */}
+      <Card>
+        <div className="card__header">
+          <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Server size={20}/> IP Addresses
+          </h3>
         </div>
-      )}
+        <div className="card__body">
+          {caseData.iocs?.ips?.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              {caseData.iocs.ips.map((ip, i) => (
+                <div 
+                  key={i} 
+                  style={{ 
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: 'var(--space-3)',
+                    backgroundColor: 'var(--bg-surface)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-secondary)',
+                    gap: 'var(--space-3)'
+                  }}
+                >
+                  <span style={{ 
+                    fontFamily: 'monospace',
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--text-primary)',
+                    flex: 1,
+                    wordBreak: 'break-all'
+                  }}>
+                    {ip}
+                  </span>
+                  <div style={{ display: 'flex', gap: 'var(--space-2)', flexShrink: 0 }}>
+                    <Tooltip content="Copy IP">
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        icon={<Copy size={14} />}
+                        onClick={() => {
+                          copyToClipboard(ip);
+                          addNotification?.('IP copied!', NOTIFICATION_TYPES.SUCCESS, 1500);
+                        }}
+                      />
+                    </Tooltip>
+                    <IOCLookupDropdown 
+                      ioc={ip} 
+                      type="ip"
+                      onNotify={addNotification}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={<Server size={32} />}
+              title="No IPs Found"
+              description="No IP addresses were extracted from this email."
+            />
+          )}
+        </div>
+      </Card>
+
+      {/* File Hashes Card */}
+      <Card>
+        <div className="card__header">
+          <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Hash size={20}/> File Hashes
+          </h3>
+        </div>
+        <div className="card__body">
+          {caseData.iocs?.hashes?.md5?.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              {caseData.iocs.hashes.md5.map((hash, i) => (
+                <div 
+                  key={i} 
+                  style={{ 
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: 'var(--space-3)',
+                    backgroundColor: 'var(--bg-surface)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-secondary)',
+                    gap: 'var(--space-3)'
+                  }}
+                >
+                  <span style={{ 
+                    fontFamily: 'monospace',
+                    fontSize: 'var(--font-size-xs)',
+                    color: 'var(--text-secondary)',
+                    flex: 1,
+                    wordBreak: 'break-all'
+                  }}>
+                    {hash}
+                  </span>
+                  <div style={{ display: 'flex', gap: 'var(--space-2)', flexShrink: 0 }}>
+                    <Tooltip content="Copy hash">
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        icon={<Copy size={14} />}
+                        onClick={() => {
+                          copyToClipboard(hash);
+                          addNotification?.('Hash copied!', NOTIFICATION_TYPES.SUCCESS, 1500);
+                        }}
+                      />
+                    </Tooltip>
+                    <IOCLookupDropdown 
+                      ioc={hash} 
+                      type="hash"
+                      onNotify={addNotification}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={<Hash size={32} />}
+              title="No Hashes Found"
+              description="No file hashes were detected in attachments."
+            />
+          )}
+        </div>
+      </Card>
+    </div>
+  </div>
+)}
 
       {/* === ADVANCED TAB === */}
       {activeTab === 'advanced' && (
@@ -2500,6 +2844,8 @@ const ReportPage = () => {
       )}
 
     </div>
+    <ToastContainer notifications={notifications} onClose={removeNotification} />
+    </>
   );
 };
 
