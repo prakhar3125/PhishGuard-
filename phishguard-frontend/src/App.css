@@ -675,22 +675,7 @@ body {
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-lg);
 }
-/* Ensure table cells allow overflow for dropdowns */
-.cases-table__cell {
-  position: relative;
-  overflow: visible !important;
-}
 
-/* IOC Action cells need higher z-index when dropdown is open */
-.cases-table__row:has(.ioc-lookup-menu) {
-  z-index: 100;
-  position: relative;
-}
-
-/* Ensure dropdown menu stays on top */
-.ioc-lookup-menu {
-  will-change: transform, opacity;
-}
 .upload-progress__text {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
@@ -2872,3 +2857,7 @@ body {
    END OF STYLESHEET
    Total Lines: ~1650+
    ============================================================================ */
+   /* Add to bottom of App.css */
+.card--overflow-visible {
+  overflow: visible !important;
+}

@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
+// Add 'Navigate' to the import list
+import { BrowserRouter as Router, Routes, Route, useNavigate, useParams, Navigate } from 'react-router-dom';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import axios from 'axios';
 import './App.css';
@@ -2197,10 +2198,13 @@ const IOCLookupDropdown = ({ ioc, type, onNotify }) => {
 /**
  * FIXED REPORT PAGE - Matches User's Custom CSS Theme
  */
+/**
+ * FIXED REPORT PAGE - With Integrated AI Analysis Tab
+ */
 const ReportPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { notifications, addNotification, removeNotification } = useNotifications(); // ADD THIS
+  const { notifications, addNotification, removeNotification } = useNotifications();
   
   // 1. State Definitions
   const [caseData, setCaseData] = useState(null);
@@ -2225,9 +2229,10 @@ const ReportPage = () => {
     fetchCaseDetails();
   }, [id]);
 
-  // 3. AI Summary Function (MOVED INSIDE COMPONENT)
-  const handleGenerateSummary = async () => {
-    if (aiSummary) return; // Don't fetch if already loaded
+  // 3. AI Summary Function
+  const handleGenerateSummary = useCallback(async () => {
+    if (aiSummary || aiLoading) return; // Prevent duplicate calls
+    
     setAiLoading(true);
     try {
       const response = await api.client.post('/ai-summary', {
@@ -2240,13 +2245,20 @@ const ReportPage = () => {
       setAiSummary(response.data);
     } catch (error) {
       console.error("Failed to generate AI summary:", error);
-      // Optional: addNotification("Failed to generate summary", "error");
+      addNotification("Failed to generate AI analysis", NOTIFICATION_TYPES.ERROR);
     } finally {
       setAiLoading(false);
     }
-  };
+  }, [aiSummary, aiLoading, caseData, addNotification]);
 
-  // 4. Loading/Error States
+  // 4. Auto-trigger AI Analysis when tab is active
+  useEffect(() => {
+    if (activeTab === 'ai_analysis' && !aiSummary && caseData) {
+      handleGenerateSummary();
+    }
+  }, [activeTab, aiSummary, caseData, handleGenerateSummary]);
+
+  // 5. Loading/Error States
   if (loading) return (
     <div className="app__container" style={{ padding: 'var(--space-8)', textAlign: 'center' }}>
       <div className="loading-spinner" style={{ margin: '0 auto' }}></div>
@@ -2259,10 +2271,10 @@ const ReportPage = () => {
         <div className="alert alert--danger">
             <div className="alert__content">{error}</div>
         </div>
-        <Button onClick={() => navigate('/')}>Back to Dashboard</Button>
+        {/* UPDATE THE PATH HERE */}
+        <Button onClick={() => navigate('/home')}>Back to Dashboard</Button>
     </div>
   );
-
   if (!caseData) return null;
 
   const verdictStyle = getVerdictStyle(caseData.verdict);
@@ -2286,7 +2298,8 @@ const ReportPage = () => {
       
       {/* 1. HEADER & NAV */}
       <div style={{ marginBottom: 'var(--space-6)' }}>
-        <Button variant="ghost" onClick={() => navigate('/')} icon={<ChevronLeft size={16} />}>
+        {/* UPDATE THE PATH HERE */}
+        <Button variant="ghost" onClick={() => navigate('/home')} icon={<ChevronLeft size={16} />}>
           Back to Dashboard
         </Button>
       </div>
@@ -2331,33 +2344,22 @@ const ReportPage = () => {
         </div>
       </div>
 
-      {/* 2. TABS & AI ACTION */}
+      {/* 2. TABS (Modified) */}
       <div style={{ 
           display: 'flex', 
-          justifyContent: 'space-between', // Push button to the right
           alignItems: 'center',
           marginBottom: 'var(--space-6)', 
           borderBottom: '1px solid var(--border-primary)' 
       }}>
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-          {['overview', 'iocs', 'advanced'].map(tab => (
+          {/* Changed 'advanced' to 'ai_analysis' */}
+          {['overview', 'iocs', 'ai_analysis'].map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)} style={getTabStyle(tab)}>
-                  {tab === 'iocs' ? 'IOCs' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tab === 'iocs' ? 'IOCs' : tab === 'ai_analysis' ? 'AI Analysis' : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
           ))}
         </div>
-
-        <Button 
-          size="sm" 
-          variant="secondary" // Or a distinct color like 'accent'
-          icon={<Zap size={14} />} 
-          onClick={handleGenerateSummary}
-          loading={aiLoading}
-          disabled={aiLoading}
-          style={{ marginBottom: '8px' }} // Align with tabs
-        >
-          AI Analysis
-        </Button>
+        {/* Button removed here */}
       </div>
 
       {/* 3. TAB CONTENT */}
@@ -2366,480 +2368,487 @@ const ReportPage = () => {
       {activeTab === 'overview' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: 'var(--space-6)' }}>
 
-          {/* AI SUMMARY CARD */}
-          {aiSummary && (
-            <Card style={{ gridColumn: '1 / -1', borderLeft: '4px solid var(--primary-500)' }}>
-                <div className="card__header">
-                <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Zap size={20} className="text-primary-500" /> Executive Threat Summary
-                </h3>
-                </div>
-                <div className="card__body">
-                <p style={{ marginBottom: '1rem', fontSize: '1rem', lineHeight: '1.6' }}>
-                    {aiSummary.summary}
-                </p>
-                <div>
-                    <h4 style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                    Recommended Actions:
-                    </h4>
-                    <ul style={{ paddingLeft: '1.5rem', margin: 0 }}>
-                    {aiSummary.actions?.map((action, idx) => (
-                        <li key={idx} style={{ marginBottom: '0.25rem' }}>{action}</li>
-                    ))}
-                    </ul>
-                </div>
-                </div>
-            </Card>
-            )}
+           {/* Email Details Card */}
+           <Card>
+               <div className="card__header">
+                   <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                       <Mail size={20}/> Email Details
+                   </h3>
+               </div>
+               <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+                   {[
+                       { label: 'Subject', value: caseData.subject },
+                       { label: 'Sender', value: caseData.sender },
+                       { label: 'Received', value: formatDate(caseData.received_time) }
+                   ].map((item, i) => (
+                       <div key={i} style={{ 
+                           padding: 'var(--space-3)', 
+                           backgroundColor: 'var(--bg-subtle)', 
+                           borderRadius: 'var(--radius-md)',
+                           border: '1px solid var(--border-secondary)'
+                       }}>
+                           <span style={{ 
+                               display: 'block', 
+                               fontSize: 'var(--font-size-xs)', 
+                               color: 'var(--text-tertiary)', 
+                               textTransform: 'uppercase', 
+                               marginBottom: '4px' 
+                           }}>
+                               {item.label}
+                           </span>
+                           <span style={{ 
+                               color: 'var(--text-primary)', 
+                               fontWeight: '500', 
+                               wordBreak: 'break-word' 
+                           }}>
+                               {item.value}
+                           </span>
+                       </div>
+                   ))}
+               </div>
+           </Card>
 
-            <Card>
-                <div className="card__header">
-                    <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Mail size={20}/> Email Details
-                    </h3>
-                </div>
-                <div className="card__body" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-                    {/* Items using your theme variables for background colors */}
-                    {[
-                        { label: 'Subject', value: caseData.subject },
-                        { label: 'Sender', value: caseData.sender },
-                        { label: 'Received', value: formatDate(caseData.received_time) }
-                    ].map((item, i) => (
-                        <div key={i} style={{ 
-                            padding: 'var(--space-3)', 
-                            backgroundColor: 'var(--bg-subtle)', // Fixed dark mode bg
-                            borderRadius: 'var(--radius-md)',
-                            border: '1px solid var(--border-secondary)'
-                        }}>
-                            <span style={{ 
-                                display: 'block', 
-                                fontSize: 'var(--font-size-xs)', 
-                                color: 'var(--text-tertiary)', 
-                                textTransform: 'uppercase', 
-                                marginBottom: '4px' 
-                            }}>
-                                {item.label}
-                            </span>
-                            <span style={{ 
-                                color: 'var(--text-primary)', 
-                                fontWeight: '500', 
-                                wordBreak: 'break-word' 
-                            }}>
-                                {item.value}
-                            </span>
-                        </div>
-                    ))}
-                </div>
-            </Card>
-
-            {/* Risk Breakdown Card */}
-            <Card>
-                <div className="card__header">
-                    <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Activity size={20}/> Scoring Breakdown
-                    </h3>
-                </div>
-                <div className="card__body">
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-                        {Object.entries(caseData.breakdown || {}).map(([key, score]) => (
-                            <div key={key} style={{ 
-                                display: 'flex', 
-                                justifyContent: 'space-between', 
-                                paddingBottom: 'var(--space-2)', 
-                                borderBottom: '1px dashed var(--border-secondary)' 
-                            }}>
-                                <span style={{ textTransform: 'capitalize', color: 'var(--text-secondary)' }}>
-                                    {key.replace('_', ' ')}
-                                </span>
-                                <span style={{ 
-                                    fontWeight: 'bold', 
-                                    color: score > 0 ? 'var(--danger-500)' : 'var(--success-500)' 
-                                }}>
-                                    {score > 0 ? `+${score}` : score}
-                                </span>
-                            </div>
-                        ))}
-                        <div style={{ 
-                            marginTop: 'var(--space-4)', 
-                            paddingTop: 'var(--space-3)', 
-                            borderTop: '2px solid var(--border-primary)', 
-                            display: 'flex', 
-                            justifyContent: 'space-between' 
-                        }}>
-                            <strong style={{ color: 'var(--text-primary)' }}>Total Risk Score</strong>
-                            <strong style={{ color: 'var(--text-primary)' }}>{caseData.risk_score}/100</strong>
-                        </div>
-                    </div>
-                </div>
-            </Card>
-            
-            {/* AI Analysis Card */}
-            <Card style={{ gridColumn: '1 / -1' }}>
-                <div className="card__header">
-                    <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Zap size={20}/> AI & Body Analysis
-                    </h3>
-                </div>
-                <div className="card__body">
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--space-6)', marginBottom: 'var(--space-6)' }}>
-                        <div>
-                            <h4 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)' }}>ML Model Prediction</h4>
-                            <div style={{ padding: 'var(--space-3)', backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)' }}>
-                                <div style={{ marginBottom: '4px', color: 'var(--text-primary)' }}>
-                                    Is Phishing: <strong>{caseData.ml_prediction?.is_phishing ? 'YES' : 'NO'}</strong>
-                                </div>
-                                <div style={{ color: 'var(--text-secondary)' }}>
-                                    Confidence: <strong>{Math.round((caseData.ml_prediction?.confidence || 0) * 100)}%</strong>
-                                </div>
-                            </div>
-                        </div>
-                        <div>
-                            <h4 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)' }}>Urgency & Tone</h4>
-                            <div style={{ padding: 'var(--space-3)', backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)' }}>
-                                <div style={{ color: 'var(--text-primary)' }}>
-                                    Urgency Detected: <strong>{caseData.body_analysis?.urgency_detected ? 'Yes' : 'No'}</strong>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div>
-                        <h4 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)' }}>Content Snippet</h4>
-                        <div style={{ 
-                            fontFamily: 'monospace', 
-                            backgroundColor: 'var(--bg-base)', // Darker background for code 
-                            padding: 'var(--space-4)', 
-                            borderRadius: 'var(--radius-md)', 
-                            fontSize: 'var(--font-size-sm)',
-                            color: 'var(--text-secondary)',
-                            border: '1px solid var(--border-secondary)'
-                        }}>
-                            {caseData.body_analysis?.snippet || "No snippet available"}
-                        </div>
-                    </div>
-                </div>
-            </Card>
+           {/* Risk Breakdown Card */}
+           <Card>
+               <div className="card__header">
+                   <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                       <Activity size={20}/> Scoring Breakdown
+                   </h3>
+               </div>
+               <div className="card__body">
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                       {Object.entries(caseData.breakdown || {}).map(([key, score]) => (
+                           <div key={key} style={{ 
+                               display: 'flex', 
+                               justifyContent: 'space-between', 
+                               paddingBottom: 'var(--space-2)', 
+                               borderBottom: '1px dashed var(--border-secondary)' 
+                           }}>
+                               <span style={{ textTransform: 'capitalize', color: 'var(--text-secondary)' }}>
+                                   {key.replace('_', ' ')}
+                               </span>
+                               <span style={{ 
+                                   fontWeight: 'bold', 
+                                   color: score > 0 ? 'var(--danger-500)' : 'var(--success-500)' 
+                               }}>
+                                   {score > 0 ? `+${score}` : score}
+                               </span>
+                           </div>
+                       ))}
+                       <div style={{ 
+                           marginTop: 'var(--space-4)', 
+                           paddingTop: 'var(--space-3)', 
+                           borderTop: '2px solid var(--border-primary)', 
+                           display: 'flex', 
+                           justifyContent: 'space-between' 
+                       }}>
+                           <strong style={{ color: 'var(--text-primary)' }}>Total Risk Score</strong>
+                           <strong style={{ color: 'var(--text-primary)' }}>{caseData.risk_score}/100</strong>
+                       </div>
+                   </div>
+               </div>
+           </Card>
+           
+           {/* Static AI & Body Analysis Card (ML Model) */}
+           <Card style={{ gridColumn: '1 / -1' }}>
+               <div className="card__header">
+                   <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                       <Zap size={20}/> Body Analysis & ML
+                   </h3>
+               </div>
+               <div className="card__body">
+                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--space-6)', marginBottom: 'var(--space-6)' }}>
+                       <div>
+                           <h4 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)' }}>ML Model Prediction</h4>
+                           <div style={{ padding: 'var(--space-3)', backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)' }}>
+                               <div style={{ marginBottom: '4px', color: 'var(--text-primary)' }}>
+                                   Is Phishing: <strong>{caseData.ml_prediction?.is_phishing ? 'YES' : 'NO'}</strong>
+                               </div>
+                               <div style={{ color: 'var(--text-secondary)' }}>
+                                   Confidence: <strong>{Math.round((caseData.ml_prediction?.confidence || 0) * 100)}%</strong>
+                               </div>
+                           </div>
+                       </div>
+                       <div>
+                           <h4 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)' }}>Urgency & Tone</h4>
+                           <div style={{ padding: 'var(--space-3)', backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)' }}>
+                               <div style={{ color: 'var(--text-primary)' }}>
+                                   Urgency Detected: <strong>{caseData.body_analysis?.urgency_detected ? 'Yes' : 'No'}</strong>
+                               </div>
+                           </div>
+                       </div>
+                   </div>
+                   <div>
+                       <h4 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)' }}>Content Snippet</h4>
+                       <div style={{ 
+                           fontFamily: 'monospace', 
+                           backgroundColor: 'var(--bg-base)', 
+                           padding: 'var(--space-4)', 
+                           borderRadius: 'var(--radius-md)', 
+                           fontSize: 'var(--font-size-sm)',
+                           color: 'var(--text-secondary)',
+                           border: '1px solid var(--border-secondary)'
+                       }}>
+                           {caseData.body_analysis?.snippet || "No snippet available"}
+                       </div>
+                   </div>
+               </div>
+           </Card>
         </div>
       )}
 
       {/* === IOCS TAB === */}
-      {/* === IOCS TAB === */}
-{activeTab === 'iocs' && (
-  <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
-    
-    {/* URLs & Domains Table */}
-    <Card>
-      <div className="card__header">
-        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <LinkIcon size={20}/> URLs & Domains
-        </h3>
-      </div>
-      <div className="card__body" style={{ padding: 0 }}>
-        {(caseData.iocs?.urls?.length > 0 || caseData.iocs?.domains?.length > 0) ? (
-          <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-            <table className="cases-table" style={{ tableLayout: 'fixed', width: '100%' }}>
-              <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-surface)', zIndex: 10 }}>
-                <tr>
-                  <th style={{ width: '100px' }}>Type</th>
-                  <th>Value</th>
-                  <th style={{ width: '120px', textAlign: 'right', paddingRight: 'var(--space-6)' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {caseData.iocs?.urls?.map((url, i) => {
-                  const iocType = detectIOCType(url);
-                  return (
-                    <tr key={`url-${i}`} className="cases-table__row">
-                      <td className="cases-table__cell">
-                        <Badge variant="info" icon={<LinkIcon size={12} />}>
-                          {iocType.toUpperCase()}
-                        </Badge>
-                      </td>
-                      <td className="cases-table__cell" style={{ 
-                        wordBreak: 'break-all', 
-                        whiteSpace: 'normal',
-                        fontFamily: 'monospace',
-                        fontSize: 'var(--font-size-xs)'
-                      }}>
-                        {url}
-                      </td>
-                      <td className="cases-table__cell" style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
-                          <Tooltip content="Copy to clipboard">
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              icon={<Copy size={14} />}
-                              onClick={() => {
-                                copyToClipboard(url);
-                                addNotification?.('Copied to clipboard!', NOTIFICATION_TYPES.SUCCESS, 1500);
-                              }}
-                            />
-                          </Tooltip>
-                          <IOCLookupDropdown 
-                            ioc={url} 
-                            type={iocType}
-                            onNotify={addNotification}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {caseData.iocs?.domains?.map((domain, i) => (
-                  <tr key={`dom-${i}`} className="cases-table__row">
-                    <td className="cases-table__cell">
-                      <Badge variant="neutral" icon={<Globe size={12} />}>
-                        DOMAIN
-                      </Badge>
-                    </td>
-                    <td className="cases-table__cell" style={{ 
-                      fontFamily: 'monospace',
-                      fontSize: 'var(--font-size-xs)'
-                    }}>
-                      {domain}
-                    </td>
-                    <td className="cases-table__cell" style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
-                        <Tooltip content="Copy to clipboard">
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            icon={<Copy size={14} />}
-                            onClick={() => {
-                              copyToClipboard(domain);
-                              addNotification?.('Copied to clipboard!', NOTIFICATION_TYPES.SUCCESS, 1500);
-                            }}
-                          />
-                        </Tooltip>
-                        <IOCLookupDropdown 
-                          ioc={domain} 
-                          type="domain"
-                          onNotify={addNotification}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div style={{ padding: 'var(--space-12)', textAlign: 'center' }}>
-            <EmptyState
-              icon={<LinkIcon size={48} />}
-              title="No URLs or Domains Found"
-              description="This email does not contain any extracted URLs or domains."
-            />
-          </div>
-        )}
-      </div>
-    </Card>
-
-    {/* IP Addresses & File Hashes Grid */}
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: 'var(--space-6)' }}>
-      
-      {/* IP Addresses Card */}
-      <Card>
-        <div className="card__header">
-          <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Server size={20}/> IP Addresses
-          </h3>
-        </div>
-        <div className="card__body">
-          {caseData.iocs?.ips?.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-              {caseData.iocs.ips.map((ip, i) => (
-                <div 
-                  key={i} 
-                  style={{ 
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: 'var(--space-3)',
-                    backgroundColor: 'var(--bg-surface)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-secondary)',
-                    gap: 'var(--space-3)'
-                  }}
-                >
-                  <span style={{ 
-                    fontFamily: 'monospace',
-                    fontSize: 'var(--font-size-sm)',
-                    color: 'var(--text-primary)',
-                    flex: 1,
-                    wordBreak: 'break-all'
-                  }}>
-                    {ip}
-                  </span>
-                  <div style={{ display: 'flex', gap: 'var(--space-2)', flexShrink: 0 }}>
-                    <Tooltip content="Copy IP">
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        icon={<Copy size={14} />}
-                        onClick={() => {
-                          copyToClipboard(ip);
-                          addNotification?.('IP copied!', NOTIFICATION_TYPES.SUCCESS, 1500);
-                        }}
-                      />
-                    </Tooltip>
-                    <IOCLookupDropdown 
-                      ioc={ip} 
-                      type="ip"
-                      onNotify={addNotification}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              icon={<Server size={32} />}
-              title="No IPs Found"
-              description="No IP addresses were extracted from this email."
-            />
-          )}
-        </div>
-      </Card>
-
-      {/* File Hashes Card */}
-      <Card>
-        <div className="card__header">
-          <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Hash size={20}/> File Hashes
-          </h3>
-        </div>
-        <div className="card__body">
-          {caseData.iocs?.hashes?.md5?.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-              {caseData.iocs.hashes.md5.map((hash, i) => (
-                <div 
-                  key={i} 
-                  style={{ 
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: 'var(--space-3)',
-                    backgroundColor: 'var(--bg-surface)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-secondary)',
-                    gap: 'var(--space-3)'
-                  }}
-                >
-                  <span style={{ 
-                    fontFamily: 'monospace',
-                    fontSize: 'var(--font-size-xs)',
-                    color: 'var(--text-secondary)',
-                    flex: 1,
-                    wordBreak: 'break-all'
-                  }}>
-                    {hash}
-                  </span>
-                  <div style={{ display: 'flex', gap: 'var(--space-2)', flexShrink: 0 }}>
-                    <Tooltip content="Copy hash">
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        icon={<Copy size={14} />}
-                        onClick={() => {
-                          copyToClipboard(hash);
-                          addNotification?.('Hash copied!', NOTIFICATION_TYPES.SUCCESS, 1500);
-                        }}
-                      />
-                    </Tooltip>
-                    <IOCLookupDropdown 
-                      ioc={hash} 
-                      type="hash"
-                      onNotify={addNotification}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              icon={<Hash size={32} />}
-              title="No Hashes Found"
-              description="No file hashes were detected in attachments."
-            />
-          )}
-        </div>
-      </Card>
-    </div>
-  </div>
-)}
-
-      {/* === ADVANCED TAB === */}
-      {activeTab === 'advanced' && (
+      {activeTab === 'iocs' && (
         <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
-            <Card>
-                <div className="card__header">
-                    <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Globe size={20}/> External Threat Intelligence
-                    </h3>
-                </div>
-                <div className="card__body">
-                    {caseData.threat_intel && Object.keys(caseData.threat_intel).length > 0 ? (
-                        <div style={{ 
-                            backgroundColor: '#1e1e1e', // Force dark background for code
-                            color: '#d4d4d4', 
-                            padding: 'var(--space-4)', 
-                            borderRadius: 'var(--radius-lg)', 
-                            fontFamily: 'monospace',
-                            fontSize: 'var(--font-size-xs)',
-                            overflowX: 'auto'
-                        }}>
-                            <pre style={{ margin: 0 }}>
-                                {JSON.stringify(caseData.threat_intel, null, 2)}
-                            </pre>
-                        </div>
-                    ) : (
-                        <p style={{ color: 'var(--text-secondary)' }}>No matches found in external databases (VirusTotal/AbuseIPDB).</p>
-                    )}
-                </div>
-            </Card>
-
-            <Card>
-                <div className="card__header">
-                    <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <File size={20}/> Attachment Analysis
-                    </h3>
-                </div>
-                <div className="card__body">
-                    {caseData.attachments && caseData.attachments.length > 0 ? (
-                        caseData.attachments.map((att, i) => (
-                            <div key={i} style={{ 
-                                border: '1px solid var(--border-primary)', 
-                                borderRadius: 'var(--radius-lg)', 
-                                padding: 'var(--space-4)', 
-                                marginBottom: 'var(--space-4)',
-                                backgroundColor: 'var(--bg-subtle)'
+          
+          {/* 1. URLs & Domains Table */}
+          <Card className="card--overflow-visible">
+            <div className="card__header">
+              <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <LinkIcon size={20}/> URLs & Domains
+              </h3>
+            </div>
+            <div className="card__body" style={{ padding: 0 }}>
+              {(caseData.iocs?.urls?.length > 0 || caseData.iocs?.domains?.length > 0) ? (
+                <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                  <table className="cases-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+                    <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-surface)', zIndex: 10 }}>
+                      <tr>
+                        <th style={{ width: '100px' }}>Type</th>
+                        <th>Value</th>
+                        <th style={{ width: '120px', textAlign: 'right', paddingRight: 'var(--space-6)' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* URLs */}
+                      {caseData.iocs?.urls?.map((url, i) => {
+                        const iocType = detectIOCType(url);
+                        return (
+                          <tr key={`url-${i}`} className="cases-table__row">
+                            <td className="cases-table__cell">
+                              <Badge variant="info" icon={<LinkIcon size={12} />}>
+                                {iocType.toUpperCase()}
+                              </Badge>
+                            </td>
+                            <td className="cases-table__cell" style={{ 
+                              wordBreak: 'break-all', 
+                              fontFamily: 'monospace',
+                              fontSize: 'var(--font-size-xs)'
                             }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
-                                    <strong style={{ color: 'var(--text-primary)' }}>{att.filename}</strong>
-                                    <Badge variant={att.risk_score > 0 ? 'danger' : 'success'}>Score: {att.risk_score}</Badge>
-                                </div>
-                                <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>
-                                    <p>Type: {att.file_type}</p>
-                                    <p>MD5: <span style={{ fontFamily: 'monospace' }}>{att.md5}</span></p>
-                                    {att.findings && att.findings.length > 0 && (
-                                        <div style={{ marginTop: 'var(--space-2)' }}>
-                                            <strong>Findings:</strong>
-                                            <ul style={{ paddingLeft: '20px', margin: '5px 0' }}>
-                                                {att.findings.map((f, idx) => (
-                                                    <li key={idx} style={{ color: 'var(--danger-500)' }}>{f}</li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-                                </div>
+                              {url}
+                            </td>
+                            <td className="cases-table__cell" style={{ textAlign: 'right', overflow: 'visible' }}>
+                              <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+                                <Tooltip content="Copy">
+                                  <Button
+                                    variant="ghost"
+                                    size="xs"
+                                    icon={<Copy size={14} />}
+                                    onClick={() => {
+                                      copyToClipboard(url);
+                                      addNotification?.('Copied!', NOTIFICATION_TYPES.SUCCESS, 1000);
+                                    }}
+                                  />
+                                </Tooltip>
+                                <IOCLookupDropdown 
+                                  ioc={url} 
+                                  type={iocType}
+                                  onNotify={addNotification}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {/* Domains */}
+                      {caseData.iocs?.domains?.map((domain, i) => (
+                        <tr key={`dom-${i}`} className="cases-table__row">
+                          <td className="cases-table__cell">
+                            <Badge variant="neutral" icon={<Globe size={12} />}>
+                              DOMAIN
+                            </Badge>
+                          </td>
+                          <td className="cases-table__cell" style={{ 
+                            fontFamily: 'monospace',
+                            fontSize: 'var(--font-size-xs)'
+                          }}>
+                            {domain}
+                          </td>
+                          <td className="cases-table__cell" style={{ textAlign: 'right', overflow: 'visible' }}>
+                            <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+                              <Tooltip content="Copy">
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  icon={<Copy size={14} />}
+                                  onClick={() => {
+                                    copyToClipboard(domain);
+                                    addNotification?.('Copied!', NOTIFICATION_TYPES.SUCCESS, 1000);
+                                  }}
+                                />
+                              </Tooltip>
+                              <IOCLookupDropdown 
+                                ioc={domain} 
+                                type="domain"
+                                onNotify={addNotification}
+                              />
                             </div>
-                        ))
-                    ) : (
-                        <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No attachments found.</p>
-                    )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-            </Card>
+              ) : (
+                <div style={{ padding: 'var(--space-12)', textAlign: 'center' }}>
+                  <EmptyState
+                    icon={<LinkIcon size={48} />}
+                    title="No URLs Found"
+                    description="No URLs or domains were extracted."
+                  />
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* 2. IP Addresses Table */}
+          <Card className="card--overflow-visible">
+            <div className="card__header">
+              <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Server size={20}/> IP Addresses
+              </h3>
+            </div>
+            <div className="card__body" style={{ padding: 0 }}>
+              {caseData.iocs?.ips?.length > 0 ? (
+                <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                  <table className="cases-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+                    <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-surface)', zIndex: 10 }}>
+                      <tr>
+                        <th style={{ width: '100px' }}>Type</th>
+                        <th>Value</th>
+                        <th style={{ width: '120px', textAlign: 'right', paddingRight: 'var(--space-6)' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {caseData.iocs.ips.map((ip, i) => (
+                        <tr key={`ip-${i}`} className="cases-table__row">
+                          <td className="cases-table__cell">
+                            <Badge variant="warning" icon={<Server size={12} />}>
+                              IPV4
+                            </Badge>
+                          </td>
+                          <td className="cases-table__cell" style={{ 
+                            fontFamily: 'monospace',
+                            fontSize: 'var(--font-size-xs)'
+                          }}>
+                            {ip}
+                          </td>
+                          <td className="cases-table__cell" style={{ textAlign: 'right', overflow: 'visible' }}>
+                            <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+                              <Tooltip content="Copy">
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  icon={<Copy size={14} />}
+                                  onClick={() => {
+                                    copyToClipboard(ip);
+                                    addNotification?.('Copied!', NOTIFICATION_TYPES.SUCCESS, 1000);
+                                  }}
+                                />
+                              </Tooltip>
+                              <IOCLookupDropdown 
+                                ioc={ip} 
+                                type="ip"
+                                onNotify={addNotification}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ padding: 'var(--space-12)', textAlign: 'center' }}>
+                  <EmptyState
+                    icon={<Server size={48} />}
+                    title="No IPs Found"
+                    description="No IP addresses were extracted."
+                  />
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* 3. File Hashes Table */}
+          <Card className="card--overflow-visible">
+            <div className="card__header">
+              <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Hash size={20}/> File Hashes
+              </h3>
+            </div>
+            <div className="card__body" style={{ padding: 0 }}>
+              {caseData.iocs?.hashes?.md5?.length > 0 ? (
+                <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                  <table className="cases-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+                    <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--bg-surface)', zIndex: 10 }}>
+                      <tr>
+                        <th style={{ width: '100px' }}>Type</th>
+                        <th>Value</th>
+                        <th style={{ width: '120px', textAlign: 'right', paddingRight: 'var(--space-6)' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {caseData.iocs.hashes.md5.map((hash, i) => (
+                        <tr key={`hash-${i}`} className="cases-table__row">
+                          <td className="cases-table__cell">
+                            <Badge variant="neutral" icon={<Hash size={12} />}>
+                              MD5
+                            </Badge>
+                          </td>
+                          <td className="cases-table__cell" style={{ 
+                            wordBreak: 'break-all', 
+                            fontFamily: 'monospace',
+                            fontSize: 'var(--font-size-xs)'
+                          }}>
+                            {hash}
+                          </td>
+                          <td className="cases-table__cell" style={{ textAlign: 'right', overflow: 'visible' }}>
+                            <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+                              <Tooltip content="Copy">
+                                <Button
+                                  variant="ghost"
+                                  size="xs"
+                                  icon={<Copy size={14} />}
+                                  onClick={() => {
+                                    copyToClipboard(hash);
+                                    addNotification?.('Copied!', NOTIFICATION_TYPES.SUCCESS, 1000);
+                                  }}
+                                />
+                              </Tooltip>
+                              <IOCLookupDropdown 
+                                ioc={hash} 
+                                type="hash"
+                                onNotify={addNotification}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ padding: 'var(--space-12)', textAlign: 'center' }}>
+                  <EmptyState
+                    icon={<Hash size={48} />}
+                    title="No Hashes Found"
+                    description="No file hashes were detected."
+                  />
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* 4. Attachment Analysis */}
+          <Card>
+            <div className="card__header">
+                <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <File size={20}/> Attachment Analysis
+                </h3>
+            </div>
+            <div className="card__body">
+                {caseData.attachments && caseData.attachments.length > 0 ? (
+                    caseData.attachments.map((att, i) => (
+                        <div key={i} style={{ 
+                            border: '1px solid var(--border-primary)', 
+                            borderRadius: 'var(--radius-lg)', 
+                            padding: 'var(--space-4)', 
+                            marginBottom: 'var(--space-4)',
+                            backgroundColor: 'var(--bg-subtle)'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
+                                <strong style={{ color: 'var(--text-primary)' }}>{att.filename}</strong>
+                                <Badge variant={att.risk_score > 0 ? 'danger' : 'success'}>Score: {att.risk_score}</Badge>
+                            </div>
+                            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--text-secondary)' }}>
+                                <p>Type: {att.file_type}</p>
+                                <p>MD5: <span style={{ fontFamily: 'monospace' }}>{att.md5}</span></p>
+                                {att.findings && att.findings.length > 0 && (
+                                    <div style={{ marginTop: 'var(--space-2)' }}>
+                                        <strong>Findings:</strong>
+                                        <ul style={{ paddingLeft: '20px', margin: '5px 0' }}>
+                                            {att.findings.map((f, idx) => (
+                                                <li key={idx} style={{ color: 'var(--danger-500)' }}>{f}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <p style={{ color: 'var(--text-tertiary)', fontStyle: 'italic' }}>No attachments found.</p>
+                )}
+            </div>
+          </Card>
+
+        </div>
+      )}
+
+      {/* === NEW AI ANALYSIS TAB (Replaces Advanced) === */}
+      {activeTab === 'ai_analysis' && (
+        <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
+            
+            {/* Loading Buffer */}
+            {aiLoading && (
+                <Card>
+                    <div style={{ padding: 'var(--space-12)', textAlign: 'center' }}>
+                        <div className="loading-spinner" style={{ margin: '0 auto 1.5rem', width: '40px', height: '40px' }}></div>
+                        <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Analyzing Threat Context...</h3>
+                        <p style={{ color: 'var(--text-secondary)' }}>Our AI is generating a comprehensive security summary.</p>
+                    </div>
+                </Card>
+            )}
+
+            {/* AI Summary Result */}
+            {!aiLoading && aiSummary && (
+                <Card style={{ borderLeft: '4px solid var(--primary-500)' }}>
+                    <div className="card__header">
+                        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Zap size={20} className="text-primary-500" /> Executive Threat Summary
+                        </h3>
+                    </div>
+                    <div className="card__body">
+                        <p style={{ marginBottom: '1.5rem', fontSize: '1.05rem', lineHeight: '1.7' }}>
+                            {aiSummary.summary}
+                        </p>
+                        
+                        <div style={{ backgroundColor: 'var(--bg-subtle)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)' }}>
+                            <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-primary)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <CheckCircle size={16} /> Recommended Actions:
+                            </h4>
+                            <ul style={{ paddingLeft: '1.5rem', margin: 0 }}>
+                                {aiSummary.actions?.map((action, idx) => (
+                                    <li key={idx} style={{ marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>{action}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+                </Card>
+            )}
+
+            {/* Fallback / Error State */}
+            {!aiLoading && !aiSummary && (
+                <EmptyState 
+                    icon={<AlertTriangle size={48} />} 
+                    title="Analysis Not Available" 
+                    description="Unable to generate the AI summary at this time." 
+                    action={
+                        <Button variant="secondary" onClick={handleGenerateSummary}>Try Again</Button>
+                    }
+                />
+            )}
         </div>
       )}
 
@@ -2848,8 +2857,6 @@ const ReportPage = () => {
     </>
   );
 };
-
-
 // ============================================================================
 // MAIN APP COMPONENT
 // ============================================================================
@@ -2952,10 +2959,13 @@ function App() {
     <Router>
       <div className="app" data-theme={theme}>
         <Routes>
-          {/* If path is "/", show the Dashboard */}
-          <Route path="/" element={<Dashboard />} />
+          {/* Redirect root URL ("/") to "/home" */}
+          <Route path="/" element={<Navigate to="/home" replace />} />
+
+          {/* The Main Dashboard is now at "/home" */}
+          <Route path="/home" element={<Dashboard />} />
           
-          {/* If path is "/report/123", show the ReportPage */}
+          {/* Report Page */}
           <Route path="/report/:id" element={<ReportPage />} />
         </Routes>
       </div>
