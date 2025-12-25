@@ -245,6 +245,9 @@ def delete_case(case_id: int, db: Session = Depends(get_db)):
 # ============================================================================
 # STATISTICS & IOC ENDPOINTS
 # ============================================================================
+# FILE: routes.py
+
+# Find the 'get_statistics' function (around line 175) and update it:
 
 @router.get("/statistics", response_model=dict)
 def get_statistics(db: Session = Depends(get_db)):
@@ -254,7 +257,9 @@ def get_statistics(db: Session = Depends(get_db)):
     clean = db.query(func.count(PhishingCase.id)).filter(PhishingCase.verdict == 'CLEAN').scalar()
     avg_time = db.query(func.avg(PhishingCase.processing_time)).scalar() or 0
     
-    recent_cases = db.query(PhishingCase).order_by(desc(PhishingCase.processed_at)).limit(10).all()
+    # === CHANGE START: Increased limit from 10 to 50 for Timeline ===
+    recent_cases = db.query(PhishingCase).order_by(desc(PhishingCase.processed_at)).limit(50).all()
+    # === CHANGE END ===
     
     return {
         "total_processed": total,
@@ -269,7 +274,7 @@ def get_statistics(db: Session = Depends(get_db)):
                 "subject": c.subject,
                 "verdict": c.verdict,
                 "risk_score": c.risk_score,
-                "breakdown": c.breakdown or {}, # Safety fallback
+                "breakdown": c.breakdown or {}, 
                 "processed_at": c.processed_at
             }
             for c in recent_cases

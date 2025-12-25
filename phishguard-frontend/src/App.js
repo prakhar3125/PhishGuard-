@@ -2857,6 +2857,116 @@ const ReportPage = () => {
     </>
   );
 };
+// FILE: App.js
+
+// ... existing components ...
+
+/**
+ * NEW: Threat Intelligence Timeline Component
+ */
+const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
+  const [timeRange, setTimeRange] = useState(initialRange);
+
+  const activityData = useMemo(() => {
+    if (!cases || cases.length === 0) return [];
+    
+    const now = new Date();
+    // Calculate cutoff based on range
+    const cutoff = new Date(now.getTime() - (
+      timeRange === '24h' ? 86400000 : 
+      timeRange === '7d' ? 604800000 : 
+      2592000000 // 30d
+    ));
+    
+    return cases
+      .filter(c => new Date(c.processed_at) > cutoff)
+      .map(c => ({
+        id: c.id,
+        time: new Date(c.processed_at),
+        verdict: c.verdict,
+        risk_score: c.risk_score,
+        sender_domain: extractDomain(c.sender),
+        subject: c.subject
+      }))
+      .sort((a, b) => b.time - a.time);
+  }, [cases, timeRange]);
+
+  return (
+    <Card className="timeline-card" style={{ marginBottom: 'var(--space-6)' }}>
+      <div className="card__header">
+        <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Activity size={20} /> Threat Activity Timeline
+        </h3>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {['24h', '7d', '30d'].map(range => (
+            <Button
+              key={range}
+              variant={timeRange === range ? 'primary' : 'ghost'}
+              size="xs"
+              onClick={() => setTimeRange(range)}
+            >
+              {range}
+            </Button>
+          ))}
+        </div>
+      </div>
+      <div className="card__body">
+        {activityData.length > 0 ? (
+          <div className="custom-scrollbar" style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
+            {activityData.map((item) => (
+              <div key={item.id} style={{
+                display: 'flex',
+                gap: '1rem',
+                padding: '0.75rem',
+                borderLeft: `4px solid ${getVerdictStyle(item.verdict).color}`,
+                marginBottom: '0.5rem',
+                backgroundColor: 'var(--bg-subtle)',
+                borderRadius: 'var(--radius-md)',
+                alignItems: 'center'
+              }}>
+                <div style={{ minWidth: '100px', fontSize: '0.75rem', color: 'var(--text-tertiary)', display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontWeight: '600', color: 'var(--text-secondary)' }}>{item.time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                  <span>{formatDate(item.time, false)}</span>
+                </div>
+                
+                <div style={{ flex: 1, minWidth: 0 }}> {/* minWidth 0 for text truncation */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <Badge variant={getVerdictStyle(item.verdict).variant} style={{ fontSize: '0.7rem', padding: '2px 6px' }}>
+                      {item.verdict}
+                    </Badge>
+                    <span style={{ 
+                      fontSize: '0.875rem', 
+                      fontWeight: '500', 
+                      whiteSpace: 'nowrap', 
+                      overflow: 'hidden', 
+                      textOverflow: 'ellipsis',
+                      maxWidth: '400px'
+                    }}>
+                      {item.subject || 'No Subject'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', display: 'flex', gap: '12px' }}>
+                    <span>From: <strong style={{ color: 'var(--text-secondary)' }}>{item.sender_domain}</strong></span>
+                    <span>Risk: <strong style={{ color: item.risk_score > 70 ? 'var(--danger-500)' : 'var(--text-secondary)' }}>{item.risk_score}/100</strong></span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+           <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+             <Activity size={32} style={{ opacity: 0.3, marginBottom: '0.5rem' }} />
+             <p>No activity detected in the last {timeRange}.</p>
+           </div>
+        )}
+      </div>
+    </Card>
+  );
+};
+
+// ============================================================================
+// MAIN APP COMPONENT
+// ============================================================================
 // ============================================================================
 // MAIN APP COMPONENT
 // ============================================================================
@@ -2919,6 +3029,10 @@ const Dashboard = () => {
         )}
 
         <StatsDashboard stats={stats} loading={loading} />
+        {/* Only show timeline if we have data to prevent layout jump */}
+        {!loading && (
+           <ThreatActivityTimeline cases={stats.recent_cases} initialRange="24h" />
+        )}
 
         <UploadSection
           onAnalysisComplete={refetch}
