@@ -1203,32 +1203,40 @@ const Header = ({ onThemeToggle, theme, onRefresh, lastFetch }) => {
 /**
  * Enhanced Statistics Dashboard with trends
  */
-const StatsDashboard = ({ stats, loading }) => {
+/**
+ * Enhanced Statistics Dashboard with trends - Vertical Stack Version
+ */
+const StatsDashboard = ({ stats, loading, className = "" }) => {
   return (
-    <div className="stats-dashboard">
+    <div className={`stats-dashboard ${className}`} style={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      gap: '1rem',
+      height: '100%' 
+    }}>
       <StatCard
-        icon={<FileText size={32} />}
+        icon={<FileText size={24} />}
         label="Total Analyzed"
         value={stats.total_processed}
         loading={loading}
         trend={stats.trends?.total}
       />
       <StatCard
-        icon={<AlertOctagon size={32} />}
+        icon={<AlertOctagon size={24} />}
         label="Malicious Detected"
         value={stats.malicious}
         loading={loading}
         trend={stats.trends?.malicious}
       />
       <StatCard
-        icon={<AlertTriangle size={32} />}
+        icon={<AlertTriangle size={24} />}
         label="Suspicious Flagged"
         value={stats.suspicious}
         loading={loading}
         trend={stats.trends?.suspicious}
       />
       <StatCard
-        icon={<CheckCircle size={32} />}
+        icon={<CheckCircle size={24} />}
         label="Safe Emails"
         value={stats.safe}
         loading={loading}
@@ -3403,16 +3411,32 @@ const Dashboard = () => {
           </div>
         )}
 
-        <StatsDashboard stats={stats} loading={loading} />
+       <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: windowSize.width > 1024 ? '3fr 1fr' : '1fr', 
+          gap: 'var(--space-6)',
+          marginBottom: 'var(--space-8)'
+        }}>
+          {/* Left Column: Upload Section */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+             <UploadSection
+              onAnalysisComplete={refetch}
+              onNotify={addNotification}
+            />
+            {/* Timeline moved below Upload Section if desired, or keep separate */}
+          </div>
+
+          {/* Right Column: Stacked Stats */}
+          <div>
+            <StatsDashboard stats={stats} loading={loading} />
+          </div>
+        </div>
+        {/* --- NEW GRID LAYOUT END --- */}
+
         {/* Only show timeline if we have data to prevent layout jump */}
         {!loading && (
            <ThreatActivityTimeline cases={stats.recent_cases} initialRange="24h" />
         )}
-
-        <UploadSection
-          onAnalysisComplete={refetch}
-          onNotify={addNotification}
-        />
 
         <CasesTable
           cases={stats.recent_cases}
