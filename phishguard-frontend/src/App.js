@@ -232,6 +232,7 @@ const api = {
 
   async fetchCases(params = {}) {
     try {
+      // Pass params directly (skip, limit, verdict, sender)
       const response = await this.client.get('/cases', { params });
       return { data: response.data, error: null };
     } catch (error) {
@@ -481,8 +482,12 @@ const isValidEmail = (email) => {
  * Extract domain from email
  */
 const extractDomain = (email) => {
-  if (!email || !isValidEmail(email)) return 'Unknown';
-  return email.split('@')[1];
+  if (!email) return 'Unknown';
+  // Handle format: "Name <user@domain.com>"
+  const cleanEmail = email.includes('<') ? email.match(/<([^>]+)>/)?.[1] : email;
+  
+  if (!cleanEmail || !cleanEmail.includes('@')) return 'Unknown';
+  return cleanEmail.split('@')[1].toLowerCase().trim();
 };
 
 /**
@@ -1435,9 +1440,9 @@ const UploadSection = ({ onAnalysisComplete, onNotify }) => {
 };
 
 /**
- * Advanced Cases Table - FIXED (Instant Expansion, No Buffering)
+ * Advanced Cases Table - Fixed & Customizable Title
  */
-const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
+const CasesTable = ({ cases, loading, onNotify, onCasesUpdate, title = "Analysis History" }) => {
   const navigate = useNavigate();
   const [sortField, setSortField] = useState(SORT_FIELDS.ID);
   const [sortDirection, setSortDirection] = useState('desc');
@@ -1445,14 +1450,11 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRowId, setExpandedRowId] = useState(null);
   
-  // REMOVED: Unnecessary loading states that caused the buffer
-  
   const [selectedCases, setSelectedCases] = useState(new Set());
   const [showFilters, setShowFilters] = useState(false);
   const [dateFilter, setDateFilter] = useState('all');
   const [deletingCases, setDeletingCases] = useState(new Set());
 
-  // ✅ FIX 1: Instant toggle. No "await" or API calls here.
   const toggleRow = (id) => {
     if (expandedRowId === id) {
       setExpandedRowId(null);
@@ -1669,7 +1671,7 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
     return (
       <Card className="cases-table-card">
         <div className="cases-table-header">
-          <h2 className="cases-table-title">Analysis History</h2>
+          <h2 className="cases-table-title">{title}</h2>
         </div>
         <div className="cases-loading">
           {[...Array(5)].map((_, i) => (
@@ -1685,18 +1687,19 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
       <Card className="cases-table-card">
         <EmptyState
           icon={<FileText size={64} />}
-          title="No Cases Yet"
-          description="Upload your first email to start analyzing potential phishing threats."
+          title="No Cases Found"
+          description="No emails match the current criteria."
         />
       </Card>
     );
   }
 
- return (
+  return (
     <Card className="cases-table-card">
       <div className="cases-table-header">
+        {/* 2. Update the H2 to use the prop */}
         <h2 className="cases-table-title">
-          Analysis History ({filteredCases.length})
+          {title} ({filteredCases.length}) 
         </h2>
 
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1767,11 +1770,9 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
       )}
 
       <div className="cases-table-wrapper custom-scrollbar">
-        {/* ✅ FIX: Added tableLayout: 'fixed' to prevent columns from jumping */}
         <table className="cases-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              {/* ✅ FIX: Defined explicit widths for every column */}
               <th style={{ width: '40px' }}>
                 <input
                   type="checkbox"
@@ -2000,16 +2001,16 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
                               </div>
 
                               <div style={{ marginTop: '1rem', paddingTop: '1rem' }}>
-  <Button
-    variant="ghost"
-    size="sm"
-    fullWidth
-    icon={<ExternalLink size={14} />}
-    onClick={() => navigate(`/report/${caseItem.originalId}`)}
-  >
-    View Full Report
-  </Button>
-</div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  fullWidth
+                                  icon={<ExternalLink size={14} />}
+                                  onClick={() => navigate(`/report/${caseItem.originalId}`)}
+                                >
+                                  View Full Report
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -2096,7 +2097,6 @@ const CasesTable = ({ cases, loading, onNotify, onCasesUpdate }) => {
     </Card>
   );
 };
-
 /**
  * IOC Lookup Dropdown Component
  */
@@ -2881,9 +2881,10 @@ const ReportPage = () => {
 // FILE: App.js
 
 /**
- * Enhanced ThreatActivityTimeline with Grouping
+ * Enhanced ThreatActivityTimeline with Grouping & Drill-down
  */
 const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
+  const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState(initialRange);
   const [showChart, setShowChart] = useState(false);
   const [groupBy, setGroupBy] = useState('none'); // 'none', 'sender', 'verdict'
@@ -2952,7 +2953,6 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
   const handleExport = () => {
     try {
         const dataToExport = groupBy === 'none' ? filteredCases : groupedData;
-        // Simple JSON export for now, can be CSV
         const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(JSON.stringify(dataToExport, null, 2))}`;
         const link = document.createElement("a");
         link.href = jsonString;
@@ -3075,7 +3075,7 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
                             borderLeft: `4px solid ${verdictStyle.color}`,
                             marginBottom: '0.5rem', backgroundColor: 'var(--bg-subtle)',
                             borderRadius: 'var(--radius-md)', alignItems: 'center', cursor: 'pointer'
-                        }} onClick={() => window.location.href = `/report/${item.id}`}>
+                        }} onClick={() => navigate(`/report/${item.id}`)}>
                             <div style={{ minWidth: '100px', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                                 <span style={{ fontWeight: '600', display:'block', color: 'var(--text-secondary)' }}>
                                     {item.time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -3101,11 +3101,35 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
                 ) : (
                   // GROUPED VIEW
                   groupedData.map((group, idx) => (
-                    <div key={idx} style={{
+                    <div 
+                      key={idx} 
+                      style={{
                         padding: '1rem', marginBottom: '0.75rem',
                         backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)',
-                        border: '1px solid var(--border-secondary)'
-                    }}>
+                        border: '1px solid var(--border-secondary)',
+                        cursor: groupBy === 'sender' ? 'pointer' : 'default',
+                        transition: 'transform 0.2s, box-shadow 0.2s'
+                      }}
+                      onClick={() => {
+                        if (groupBy === 'sender') {
+                            navigate(`/domain/${encodeURIComponent(group.key)}`);
+                        }
+                      }}
+                      onMouseEnter={(e) => {
+                          if (groupBy === 'sender') {
+                              e.currentTarget.style.backgroundColor = 'var(--bg-overlay)';
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                              e.currentTarget.style.boxShadow = 'var(--shadow-md)';
+                          }
+                      }}
+                      onMouseLeave={(e) => {
+                          if (groupBy === 'sender') {
+                              e.currentTarget.style.backgroundColor = 'var(--bg-subtle)';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                              e.currentTarget.style.boxShadow = 'none';
+                          }
+                      }}
+                    >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                 <div style={{ 
@@ -3116,8 +3140,9 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
                                     {group.count}
                                 </div>
                                 <div>
-                                    <h4 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                                    <h4 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                                         {groupBy === 'sender' ? group.key : <Badge variant={getVerdictStyle(group.key).variant}>{group.key}</Badge>}
+                                        {groupBy === 'sender' && <ExternalLink size={12} style={{ color: 'var(--primary-500)' }} />}
                                     </h4>
                                     <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                                         Last seen: {getRelativeTime(group.latestTime)}
@@ -3153,7 +3178,10 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
                                 <div key={c.id} style={{ 
                                     display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', 
                                     marginBottom: '4px', cursor: 'pointer', padding: '4px', borderRadius: '4px' 
-                                }} className="hover-bg" onClick={() => window.location.href=`/report/${c.id}`}>
+                                }} className="hover-bg" onClick={(e) => {
+                                    e.stopPropagation(); // Prevent parent click
+                                    navigate(`/report/${c.id}`);
+                                }}>
                                     <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '70%' }}>
                                         {c.subject || '(No Subject)'}
                                     </span>
@@ -3162,6 +3190,11 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
                                     </span>
                                 </div>
                             ))}
+                            {groupBy === 'sender' && group.count > 3 && (
+                                <div style={{ fontSize: '0.75rem', color: 'var(--primary-500)', marginTop: '4px', fontStyle: 'italic' }}>
+                                    + {group.count - 3} more cases (Click to view all)
+                                </div>
+                            )}
                          </div>
                     </div>
                   ))
@@ -3179,6 +3212,109 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
         )}
       </div>
     </Card>
+  );
+};
+// FILE: App.js
+
+/**
+ * NEW: Domain/Sender Profile Page
+ */
+/**
+ * UPDATED: Domain/Sender Profile Page
+ * - Removed ThreatActivityTimeline
+ * - Shows only relevant detailed case log
+ */
+const DomainProfile = () => {
+  const { domainName } = useParams();
+  const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme(); 
+  const decodedDomain = decodeURIComponent(domainName);
+  
+  const [cases, setCases] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ total: 0, malicious: 0, riskSum: 0 });
+
+  useEffect(() => {
+    const loadDomainData = async () => {
+      setLoading(true);
+      // Fetch up to 100 recent cases specifically for this sender/domain
+      const { data } = await api.fetchCases({ sender: decodedDomain, limit: 100 });
+      
+      if (data) {
+        const relevantCases = data.filter(c => extractDomain(c.sender) === decodedDomain);
+        setCases(relevantCases);
+        // Calculate quick stats locally based on fetched data
+        const stats = relevantCases.reduce((acc, curr) => ({
+          total: acc.total + 1,
+          malicious: curr.verdict === 'MALICIOUS' ? acc.malicious + 1 : acc.malicious,
+          riskSum: acc.riskSum + (curr.risk_score || 0)
+        }), { total: 0, malicious: 0, riskSum: 0 });
+        setStats(stats);
+      }
+      setLoading(false);
+    };
+    loadDomainData();
+  }, [decodedDomain]);
+
+  const avgRisk = stats.total > 0 ? Math.round(stats.riskSum / stats.total) : 0;
+
+return (
+    <div className="app__container">
+      <Header onThemeToggle={toggleTheme} theme={theme} />
+
+      <div style={{ padding: 'var(--space-6)' }}>
+        <div style={{ marginBottom: 'var(--space-6)' }}>
+            <Button variant="ghost" onClick={() => navigate('/home')} icon={<ChevronLeft size={16} />}>
+            Back to Dashboard
+            </Button>
+        </div>
+
+        {/* ... (Keep the Header/Title Div and StatsDashboard Div exactly as they were) ... */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: 'var(--space-8)' }}>
+            {/* ... code for icon and title ... */}
+             <div style={{ 
+                width: '64px', height: '64px', borderRadius: '16px', 
+                backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-primary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: 'var(--shadow-lg)'
+            }}>
+            <Globe size={32} style={{ color: 'var(--primary-500)' }} />
+            </div>
+            <div>
+            <h1 style={{ fontSize: '2rem', fontWeight: 'bold', margin: '0 0 4px 0', letterSpacing: '-0.5px' }}>{decodedDomain}</h1>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Sender Profile</span>
+                <Badge variant={avgRisk > 70 ? 'danger' : avgRisk > 40 ? 'warning' : 'success'}>
+                    Reputation: {avgRisk > 70 ? 'Poor' : avgRisk > 40 ? 'Suspicious' : 'Good'}
+                </Badge>
+            </div>
+            </div>
+        </div>
+
+        <div className="stats-dashboard" style={{ marginBottom: 'var(--space-8)' }}>
+             {/* ... keep your existing stats cards ... */}
+             <StatCard icon={<Mail size={24}/>} label="Total Emails" value={stats.total} />
+             <StatCard icon={<AlertOctagon size={24}/>} label="Malicious" value={stats.malicious} />
+             <StatCard icon={<Activity size={24}/>} label="Avg Risk Score" value={avgRisk + '/100'} trend={avgRisk > 50 ? 1 : 0} trendValue={avgRisk > 70 ? 'High' : 'Moderate'} />
+             <Card className="stat-card" hover style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
+                <Button variant="ghost" size="sm" fullWidth icon={<ExternalLink size={14}/>} onClick={() => window.open(`https://www.virustotal.com/gui/domain/${decodedDomain}`, '_blank')}>VirusTotal</Button>
+                <Button variant="ghost" size="sm" fullWidth icon={<Search size={14}/>} onClick={() => window.open(`https://who.is/whois/${decodedDomain}`, '_blank')}>Whois</Button>
+            </Card>
+        </div>
+
+        {/* --- CHANGES ARE HERE --- */}
+        {/* 1. ThreatActivityTimeline IS REMOVED */}
+        
+        {/* 2. CasesTable has a specific title */}
+        <div style={{ marginTop: '1rem' }}>
+            <CasesTable 
+                cases={cases} 
+                loading={loading} 
+                title="Detailed Case Log" 
+            />
+        </div>
+      </div>
+    </div>
   );
 };
 // ============================================================================
@@ -3280,21 +3416,21 @@ const Dashboard = () => {
 // ============================================================================
 // 3. NEW MAIN ENTRY POINT: APP (Handles Routing)
 // ============================================================================
+// FILE: App.js
+
 function App() {
-  const { theme } = useTheme(); // Get theme here to apply to the main div wrapper
+  const { theme } = useTheme();
 
   return (
     <Router>
       <div className="app" data-theme={theme}>
         <Routes>
-          {/* Redirect root URL ("/") to "/home" */}
           <Route path="/" element={<Navigate to="/home" replace />} />
-
-          {/* The Main Dashboard is now at "/home" */}
           <Route path="/home" element={<Dashboard />} />
-          
-          {/* Report Page */}
           <Route path="/report/:id" element={<ReportPage />} />
+          
+          {/* === NEW ROUTE === */}
+          <Route path="/domain/:domainName" element={<DomainProfile />} />
         </Routes>
       </div>
     </Router>

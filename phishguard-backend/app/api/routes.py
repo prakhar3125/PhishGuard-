@@ -188,11 +188,29 @@ Output format:
 # CASE MANAGEMENT ENDPOINTS
 # ============================================================================
 
+# FILE: routes.py
+
+# ... imports ...
+
 @router.get("/cases", response_model=List[CaseResponse])
-def list_cases(skip: int = 0, limit: int = 50, verdict: str = None, db: Session = Depends(get_db)):
+def list_cases(
+    skip: int = 0, 
+    limit: int = 50, 
+    verdict: str = None, 
+    sender: str = None,  # <--- NEW PARAMETER
+    db: Session = Depends(get_db)
+):
     query = db.query(PhishingCase)
+    
     if verdict:
         query = query.filter(PhishingCase.verdict == verdict.upper())
+        
+    # === CHANGE START: Filter by sender/domain ===
+    if sender:
+        # Use ILIKE for case-insensitive partial match (covers specific email OR domain)
+        query = query.filter(PhishingCase.sender.ilike(f"%{sender}%"))
+    # === CHANGE END ===
+        
     return query.order_by(desc(PhishingCase.received_time)).offset(skip).limit(limit).all()
 
 @router.get("/cases/{case_id}", response_model=dict)
