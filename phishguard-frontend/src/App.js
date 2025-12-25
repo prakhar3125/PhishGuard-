@@ -1239,7 +1239,7 @@ const StatsDashboard = ({ stats, loading }) => {
 };
 
 /**
- * Enhanced Upload Section with drag-drop and validation
+ * Enhanced Upload Section with Dynamic Theming and Safe Navigation
  */
 const UploadSection = ({ onAnalysisComplete, onNotify }) => {
   const [file, setFile] = useState(null);
@@ -1249,34 +1249,32 @@ const UploadSection = ({ onAnalysisComplete, onNotify }) => {
   const [error, setError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
+  const navigate = useNavigate();
+
+  // Helper to safely extract the ID from various possible API response formats
+  const getReportId = (data) => {
+    if (!data) return null;
+    return data.id || data._id || data.case_id; 
+  };
 
   const validateFile = (file) => {
     const validTypes = ['.eml', '.msg', '.txt'];
     const maxSize = 10 * 1024 * 1024; // 10MB
-    
     const extension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
     
-    if (!validTypes.includes(extension)) {
-      return { valid: false, error: 'Invalid file type. Please upload .eml, .msg, or .txt files.' };
-    }
-    
-    if (file.size > maxSize) {
-      return { valid: false, error: 'File size exceeds 10MB limit.' };
-    }
-    
+    if (!validTypes.includes(extension)) return { valid: false, error: 'Invalid file type. Please upload .eml, .msg, or .txt files.' };
+    if (file.size > maxSize) return { valid: false, error: 'File size exceeds 10MB limit.' };
     return { valid: true };
   };
 
   const handleFileChange = (selectedFile) => {
     if (selectedFile) {
       const validation = validateFile(selectedFile);
-      
       if (!validation.valid) {
         setError(validation.error);
         onNotify?.(validation.error, NOTIFICATION_TYPES.ERROR);
         return;
       }
-      
       setFile(selectedFile);
       setResult(null);
       setError(null);
@@ -1285,40 +1283,26 @@ const UploadSection = ({ onAnalysisComplete, onNotify }) => {
   };
 
   const handleInputChange = (e) => handleFileChange(e.target.files?.[0]);
-
+  
   const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else {
-      setDragActive(false);
-    }
+    e.preventDefault(); e.stopPropagation();
+    setDragActive(e.type === 'dragenter' || e.type === 'dragover');
   };
 
   const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     setDragActive(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileChange(e.dataTransfer.files[0]);
-    }
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFileChange(e.dataTransfer.files[0]);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
     if (!file) {
-      const errorMsg = 'Please select a file to analyze';
-      setError(errorMsg);
-      onNotify?.(errorMsg, NOTIFICATION_TYPES.WARNING);
+      setError('Please select a file to analyze');
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    setProgress(0);
+    setLoading(true); setError(null); setProgress(0);
 
     const { data, error: apiError } = await api.analyzeEmail(file, setProgress);
 
@@ -1332,54 +1316,61 @@ const UploadSection = ({ onAnalysisComplete, onNotify }) => {
       onAnalysisComplete?.();
       onNotify?.('Email analyzed successfully!', NOTIFICATION_TYPES.SUCCESS);
     }
-
-    setLoading(false);
-    setProgress(0);
+    setLoading(false); setProgress(0);
   };
 
   const handleClear = () => {
-    setFile(null);
-    setResult(null);
-    setError(null);
+    setFile(null); setResult(null); setError(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleBrowse = () => fileInputRef.current?.click();
+  // Dynamic Theme Logic
+  const getResultTheme = (verdict) => {
+    const v = verdict?.toUpperCase();
+    if (v === 'MALICIOUS') return {
+      bg: 'rgba(239, 68, 68, 0.1)',          // Red Background
+      border: 'rgba(239, 68, 68, 0.3)',      // Red Border
+      iconColor: '#ef4444',                  // Red Icon
+      icon: <AlertOctagon size={24} />,
+      badgeVariant: 'danger'
+    };
+    if (v === 'SUSPICIOUS') return {
+      bg: 'rgba(245, 158, 11, 0.1)',         // Orange Background
+      border: 'rgba(245, 158, 11, 0.3)',
+      iconColor: '#f59e0b',
+      icon: <AlertTriangle size={24} />,
+      badgeVariant: 'warning'
+    };
+    return {
+      bg: 'rgba(16, 185, 129, 0.1)',         // Green Background (Safe)
+      border: 'rgba(16, 185, 129, 0.3)',
+      iconColor: '#10B981',
+      icon: <CheckCircle size={24} />,
+      badgeVariant: 'success'
+    };
+  };
+
+  const themeStyle = result ? getResultTheme(result.verdict) : {};
+  const reportId = getReportId(result);
 
   return (
     <Card className="upload-section">
       <div className="upload-section__header">
         <h2 className="upload-section__title">Analyze New Email</h2>
-        <p className="upload-section__subtitle">
-          Upload an email file (.eml, .msg, .txt) for AI-powered phishing analysis.
-        </p>
+        <p className="upload-section__subtitle">Upload an email file (.eml, .msg, .txt) for AI-powered phishing analysis.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="upload-form">
         {!result && (
           <div
             className={`upload-dropzone ${dragActive ? 'upload-dropzone--active' : ''} ${file ? 'upload-dropzone--has-file' : ''}`}
-            onDragEnter={handleDrag}
-            onDragLeave={handleDrag}
-            onDragOver={handleDrag}
-            onDrop={handleDrop}
-            onClick={handleBrowse}
-            role="button"
-            tabIndex={0}
+            onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()} role="button" tabIndex={0}
           >
-            <input
-              ref={fileInputRef}
-              type="file"
-              onChange={handleInputChange}
-              className="upload-input"
-              accept=".eml,.msg,.txt"
-              aria-label="File upload input"
-            />
+            <input ref={fileInputRef} type="file" onChange={handleInputChange} className="upload-input" accept=".eml,.msg,.txt" />
             {file ? (
               <div className="upload-file-info">
-                <span className="upload-file-icon">
-                  <File size={32} />
-                </span>
+                <span className="upload-file-icon"><File size={32} /></span>
                 <div className="upload-file-details">
                   <p className="upload-file-name">{file.name}</p>
                   <p className="upload-file-size">{formatFileSize(file.size)}</p>
@@ -1387,15 +1378,9 @@ const UploadSection = ({ onAnalysisComplete, onNotify }) => {
               </div>
             ) : (
               <div className="upload-placeholder">
-                <span className="upload-placeholder__icon">
-                  <Upload size={48} />
-                </span>
-                <p className="upload-placeholder__text">
-                  <strong>Click to browse</strong> or drag and drop
-                </p>
-                <p className="upload-placeholder__hint">
-                  Supports .eml, .msg, .txt files (max 10MB)
-                </p>
+                <span className="upload-placeholder__icon"><Upload size={48} /></span>
+                <p className="upload-placeholder__text"><strong>Click to browse</strong> or drag and drop</p>
+                <p className="upload-placeholder__hint">Supports .eml, .msg, .txt files (max 10MB)</p>
               </div>
             )}
           </div>
@@ -1404,38 +1389,43 @@ const UploadSection = ({ onAnalysisComplete, onNotify }) => {
         {loading && (
           <div className="upload-progress">
             <ProgressBar value={progress} showLabel size="lg" animated />
-            <p className="upload-progress__text">
-              Analyzing email for security threats and indicators of compromise...
-            </p>
+            <p className="upload-progress__text">Analyzing email for security threats...</p>
           </div>
         )}
 
         {error && (
           <div className="upload-alert upload-alert--error" role="alert">
-            <span className="upload-alert__icon">
-              <XCircle size={20} />
-            </span>
-            <div className="upload-alert__content">
-              <p className="upload-alert__message">{error}</p>
-            </div>
+            <span className="upload-alert__icon"><XCircle size={20} /></span>
+            <div className="upload-alert__content"><p className="upload-alert__message">{error}</p></div>
           </div>
         )}
 
+        {/* --- DYNAMIC RESULT SECTION --- */}
         {result && (
-          <div className="upload-alert upload-alert--success" role="status">
-            <span className="upload-alert__icon">
-              {getVerdictStyle(result.verdict).icon}
+          <div className="upload-alert" style={{ 
+              backgroundColor: themeStyle.bg, 
+              borderColor: themeStyle.border,
+              borderWidth: '1px', borderStyle: 'solid'
+          }}>
+            <span className="upload-alert__icon" style={{ color: themeStyle.iconColor }}>
+               {themeStyle.icon}
             </span>
             <div className="upload-alert__content">
-              <p className="upload-alert__message">
+              <p className="upload-alert__message" style={{ fontSize: '1rem' }}>
                 <strong>Analysis Complete</strong>
               </p>
-              <div className="upload-alert__detail">
+              <div className="upload-alert__detail" style={{ marginTop: '4px' }}>
                 <span>Verdict:</span>
-                <Badge variant={getVerdictStyle(result.verdict).variant}>
+                <Badge 
+                    variant={themeStyle.badgeVariant} 
+                    pulse={result.verdict === 'MALICIOUS'}
+                    style={result.verdict === 'MALICIOUS' ? { 
+                        fontWeight: '700', backgroundColor: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', border: '1px solid #ef4444' 
+                    } : { fontWeight: '700' }}
+                >
                   {result.verdict}
                 </Badge>
-                <span>•</span>
+                <span style={{ margin: '0 8px', opacity: 0.5 }}>•</span>
                 <span>Risk Score: <strong>{result.risk_score}/100</strong></span>
               </div>
             </div>
@@ -1443,36 +1433,36 @@ const UploadSection = ({ onAnalysisComplete, onNotify }) => {
         )}
 
         <div className="upload-actions">
-          {!result && (
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              loading={loading}
-              disabled={!file || loading}
-              icon={<Zap size={18} />}
-            >
+          {!result ? (
+            <Button type="submit" variant="primary" size="lg" loading={loading} disabled={!file || loading} icon={<Zap size={18} />}>
               {loading ? 'Analyzing...' : 'Analyze Email'}
             </Button>
-          )}
-
-          {(file || result) && !loading && (
-            <Button
-              type="button"
-              variant={result ? 'primary' : 'ghost'}
-              size="lg"
-              onClick={handleClear}
-              icon={result ? <Upload size={18} /> : <X size={18} />}
-            >
-              {result ? 'Analyze Another Email' : 'Clear'}
-            </Button>
+          ) : (
+            <div style={{ display: 'flex', gap: '1rem', width: '100%', flexWrap: 'wrap' }}>
+                <Button type="button" variant={result ? 'primary' : 'ghost'} size="lg" onClick={handleClear} icon={<Upload size={18} />} style={{ flex: 1 }}>
+                  Analyze Another
+                </Button>
+                
+                {/* SAFEGUARD: Only show if reportId exists to prevent undefined route */}
+                {reportId && (
+                    <Button 
+                      type="button" 
+                      variant="secondary" 
+                      size="lg" 
+                      onClick={() => navigate(`/report/${reportId}`)} 
+                      icon={<FileText size={18} />} 
+                      style={{ flex: 1 }}
+                    >
+                      View Full Report
+                    </Button>
+                )}
+            </div>
           )}
         </div>
       </form>
     </Card>
   );
 };
-
 /**
  * Advanced Cases Table - Fixed & Customizable Title
  */
