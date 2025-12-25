@@ -1,6 +1,18 @@
 // Add 'Navigate' to the import list
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams, Navigate } from 'react-router-dom';
-import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  Legend,
+  ComposedChart,
+  CartesianGrid,
+  Area,
+  Line
+} from 'recharts';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import axios from 'axios';
 import './App.css';
@@ -929,12 +941,14 @@ const Skeleton = ({ width = '100%', height = '20px', className = '', variant = '
 /**
  * Stat Card Component with trend indicator
  */
+/**
+ * Stat Card Component - Fixed to hide "0%" trends but keep text labels
+ */
 const StatCard = ({ icon, label, value, loading = false, trend, trendValue }) => {
   const getTrendIcon = () => {
-    if (!trend) return null;
     if (trend > 0) return <TrendingUp size={16} />;
     if (trend < 0) return <TrendingDown size={16} />;
-    return <Minus size={16} />;
+    return <Minus size={16} />; // Return Minus icon for 0/Neutral
   };
 
   const getTrendColor = () => {
@@ -942,6 +956,11 @@ const StatCard = ({ icon, label, value, loading = false, trend, trendValue }) =>
     if (trend < 0) return 'var(--danger-600)';
     return 'var(--neutral-600)';
   };
+
+  // Only show trend if:
+  // 1. It is not undefined
+  // 2. AND (it is not zero OR a custom text label exists)
+  const showTrend = trend !== undefined && (trend !== 0 || trendValue);
 
   return (
     <Card className="stat-card" hover>
@@ -953,8 +972,15 @@ const StatCard = ({ icon, label, value, loading = false, trend, trendValue }) =>
         ) : (
           <>
             <p className="stat-card__value">{value}</p>
-            {trend !== undefined && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '0.75rem', color: getTrendColor() }}>
+            {showTrend && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '4px', 
+                marginTop: '4px', 
+                fontSize: '0.75rem', 
+                color: getTrendColor() 
+              }}>
                 {getTrendIcon()}
                 <span>{trendValue || `${Math.abs(trend)}%`}</span>
               </div>
@@ -965,7 +991,6 @@ const StatCard = ({ icon, label, value, loading = false, trend, trendValue }) =>
     </Card>
   );
 };
-
 /**
  * Search Input Component
  */
@@ -1116,26 +1141,36 @@ const ToastContainer = ({ notifications, onClose }) => {
 
 /**
  * Application Header with enhanced actions
+ * MODIFIED: Added click-to-home functionality on the brand logo
+ */
+/**
+ * Application Header with enhanced actions
+ * MODIFIED: Changed subtitle to "By Prakhar Sinha"
  */
 const Header = ({ onThemeToggle, theme, onRefresh, lastFetch }) => {
+  const navigate = useNavigate();
+
   return (
     <header className="header">
       <div className="header__content">
-        <div className="header__brand">
+        <div 
+          className="header__brand" 
+          onClick={() => navigate('/home')} 
+          style={{ cursor: 'pointer' }}
+        >
           <div className="header__icon">
             <Shield size={40} />
           </div>
           <div>
             <h1 className="header__title">PhishGuard Pro</h1>
-            {lastFetch && (
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                Last updated: {getRelativeTime(lastFetch)}
-              </p>
-            )}
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: '2px' }}>
+              By Prakhar Sinha
+            </p>
           </div>
         </div>
 
         <div className="header__actions">
+          {/* ... existing actions ... */}
           <div className="header__status">
             <span className="status-indicator status-indicator--online" />
             <span className="header__status-text">Active</span>
@@ -1165,7 +1200,6 @@ const Header = ({ onThemeToggle, theme, onRefresh, lastFetch }) => {
     </header>
   );
 };
-
 /**
  * Enhanced Statistics Dashboard with trends
  */
@@ -2883,14 +2917,17 @@ const ReportPage = () => {
 /**
  * Enhanced ThreatActivityTimeline with Grouping & Drill-down
  */
+/**
+ * Enhanced ThreatActivityTimeline with Dual-Axis Graph & List Toggle
+ */
 const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
   const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState(initialRange);
-  const [showChart, setShowChart] = useState(false);
-  const [groupBy, setGroupBy] = useState('none'); // 'none', 'sender', 'verdict'
+  const [showChart, setShowChart] = useState(true);
+  const [groupBy, setGroupBy] = useState('none');
   const { addNotification } = useNotifications();
 
-  // 1. Filter Data by Time Range first
+  // 1. LIST VIEW LOGIC
   const filteredCases = useMemo(() => {
     if (!cases || cases.length === 0) return [];
     
@@ -2906,7 +2943,6 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
       .sort((a, b) => new Date(b.processed_at) - new Date(a.processed_at));
   }, [cases, timeRange]);
 
-  // 2. Compute Grouped Data
   const groupedData = useMemo(() => {
     if (groupBy === 'none') return filteredCases.map(c => ({
       ...c,
@@ -2915,17 +2951,11 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
     }));
 
     const groups = {};
-    
     filteredCases.forEach(c => {
       const key = groupBy === 'sender' ? extractDomain(c.sender) : c.verdict;
       if (!groups[key]) {
         groups[key] = {
-          key,
-          count: 0,
-          totalRisk: 0,
-          latestTime: new Date(0),
-          verdicts: {},
-          cases: []
+          key, count: 0, totalRisk: 0, latestTime: new Date(0), verdicts: {}, cases: []
         };
       }
       groups[key].count++;
@@ -2935,48 +2965,89 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
       const time = new Date(c.processed_at);
       if (time > groups[key].latestTime) groups[key].latestTime = time;
       
-      // Track verdict distribution within sender group
       if (groupBy === 'sender') {
           groups[key].verdicts[c.verdict] = (groups[key].verdicts[c.verdict] || 0) + 1;
       }
     });
 
     return Object.values(groups)
-      .map(g => ({
-        ...g,
-        avgRisk: Math.round(g.totalRisk / g.count),
-        time: g.latestTime // For sorting
-      }))
-      .sort((a, b) => b.totalRisk - a.totalRisk); // Sort groups by risk
+      .map(g => ({ ...g, avgRisk: Math.round(g.totalRisk / g.count), time: g.latestTime }))
+      .sort((a, b) => b.totalRisk - a.totalRisk);
   }, [filteredCases, groupBy]);
+
+  // 2. CHART VIEW LOGIC (Dual-Axis Aggregation)
+  const chartData = useMemo(() => {
+    if (!cases || cases.length === 0) return [];
+
+    const now = new Date();
+    const startTime = new Date(now.getTime() - (
+      timeRange === '24h' ? 24 * 60 * 60 * 1000 : 
+      timeRange === '7d' ? 7 * 24 * 60 * 60 * 1000 : 
+      30 * 24 * 60 * 60 * 1000
+    ));
+
+    const buckets = {};
+    const isHourly = timeRange === '24h';
+    
+    // Initialize buckets
+    let current = new Date(startTime);
+    while (current <= now) {
+      const key = isHourly 
+        ? current.toISOString().substring(0, 13) + ':00'
+        : current.toISOString().substring(0, 10);
+      
+      buckets[key] = {
+        time: new Date(current),
+        total_count: 0,
+        malicious_count: 0,
+        total_risk: 0
+      };
+      
+      if (isHourly) current.setHours(current.getHours() + 1);
+      else current.setDate(current.getDate() + 1);
+    }
+
+    // Fill buckets
+    cases.forEach(c => {
+      const caseDate = new Date(c.processed_at);
+      if (caseDate >= startTime) {
+        const key = isHourly
+          ? caseDate.toISOString().substring(0, 13) + ':00'
+          : caseDate.toISOString().substring(0, 10);
+
+        if (buckets[key]) {
+          buckets[key].total_count += 1;
+          buckets[key].total_risk += (c.risk_score || 0);
+          if (c.verdict === VERDICT_TYPES.MALICIOUS) {
+            buckets[key].malicious_count += 1;
+          }
+        }
+      }
+    });
+
+    return Object.values(buckets).map(b => ({
+      timestamp: isHourly 
+        ? b.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : b.time.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+      total_volume: b.total_count,
+      malicious_volume: b.malicious_count,
+      avg_risk: b.total_count > 0 ? Math.round(b.total_risk / b.total_count) : 0
+    }));
+  }, [cases, timeRange]);
 
   const handleExport = () => {
     try {
-        const dataToExport = groupBy === 'none' ? filteredCases : groupedData;
+        const dataToExport = showChart ? chartData : groupedData;
         const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(JSON.stringify(dataToExport, null, 2))}`;
         const link = document.createElement("a");
         link.href = jsonString;
-        link.download = `threat-timeline-${groupBy}-${timeRange}.json`;
+        link.download = `threat-activity-${timeRange}.json`;
         link.click();
         addNotification('Exported successfully!', NOTIFICATION_TYPES.SUCCESS);
     } catch (e) {
         addNotification('Export failed', NOTIFICATION_TYPES.ERROR);
     }
   };
-
-  // Chart Data Preparation
-  const chartData = useMemo(() => {
-    if (!showChart || groupedData.length === 0) return [];
-    
-    // If grouping is active, show the groups. If 'none', show individual events (limited to top 20 for chart clarity)
-    const data = groupedData.slice(0, 20); 
-
-    return data.map((item, index) => ({
-      name: groupBy === 'none' ? new Date(item.processed_at).toLocaleTimeString() : item.key,
-      risk: groupBy === 'none' ? item.risk_score : item.avgRisk,
-      count: groupBy === 'none' ? 1 : item.count,
-    }));
-  }, [groupedData, showChart, groupBy]);
 
   return (
     <Card className="timeline-card" style={{ marginBottom: 'var(--space-6)' }}>
@@ -2994,7 +3065,7 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
         </div>
         
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginLeft: 'auto' }}>
-          {/* Time Range Controls */}
+          {/* 1. Time Range Controls */}
           <div style={{ display: 'flex', gap: '0.25rem', borderRight: '1px solid var(--border-primary)', paddingRight: '0.5rem' }}>
             {['24h', '7d', '30d'].map(range => (
               <Button
@@ -3008,7 +3079,7 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
             ))}
           </div>
 
-          {/* Group By Controls */}
+          {/* 2. Group By Controls - NOW ALWAYS VISIBLE */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginRight: '4px' }}>Group:</span>
             <select 
@@ -3023,12 +3094,13 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
                     fontSize: '0.75rem'
                 }}
             >
-                <option value="none">None (Chronological)</option>
-                <option value="sender">Sender Domain</option>
+                <option value="none">None</option>
+                <option value="sender">Sender</option>
                 <option value="verdict">Verdict</option>
             </select>
           </div>
 
+          {/* 3. Action Icons */}
           <div style={{ display: 'flex', gap: '0.25rem', borderLeft: '1px solid var(--border-primary)', paddingLeft: '0.5rem' }}>
             <Tooltip content={showChart ? 'Switch to list' : 'Switch to chart'}>
               <Button
@@ -3045,176 +3117,139 @@ const ThreatActivityTimeline = ({ cases, initialRange = '24h' }) => {
         </div>
       </div>
       
-      <div className="card__body" style={{ padding: 0 }}>
-        {groupedData.length > 0 ? (
-          <>
-            {showChart ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
-                  <YAxis domain={[0, 100]} label={{ value: 'Risk Score', angle: -90, position: 'insideLeft' }}/>
-                  <RechartsTooltip 
-                    contentStyle={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-primary)' }}
-                  />
-                  <Bar dataKey="risk" fill="var(--danger-500)" radius={[4, 4, 0, 0]} name="Avg Risk" />
-                  {groupBy !== 'none' && <Bar dataKey="count" fill="var(--primary-500)" radius={[4, 4, 0, 0]} name="Count" />}
-                  <Legend />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              // List View
-              <div className="custom-scrollbar" style={{ maxHeight: '400px', overflowY: 'auto', padding: 'var(--space-4)' }}>
-                
-                {groupBy === 'none' ? (
-                  // STANDARD LIST VIEW
-                  groupedData.map((item) => {
-                    const verdictStyle = getVerdictStyle(item.verdict);
-                    return (
-                        <div key={item.id} className="timeline-item" style={{
-                            display: 'flex', gap: '1rem', padding: '0.75rem',
-                            borderLeft: `4px solid ${verdictStyle.color}`,
-                            marginBottom: '0.5rem', backgroundColor: 'var(--bg-subtle)',
-                            borderRadius: 'var(--radius-md)', alignItems: 'center', cursor: 'pointer'
-                        }} onClick={() => navigate(`/report/${item.id}`)}>
-                            <div style={{ minWidth: '100px', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
-                                <span style={{ fontWeight: '600', display:'block', color: 'var(--text-secondary)' }}>
-                                    {item.time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                                </span>
-                                {formatDate(item.time, false)}
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                    <Badge variant={verdictStyle.variant} style={{ fontSize: '0.7rem', padding: '2px 6px' }}>{item.verdict}</Badge>
-                                    <span style={{ fontSize: '0.875rem', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {item.subject || 'No Subject'}
-                                    </span>
-                                </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', display: 'flex', gap: '12px' }}>
-                                    <span>From: <strong>{item.sender_domain}</strong></span>
-                                    <span>Risk: <strong>{item.risk_score}/100</strong></span>
-                                </div>
-                            </div>
-                            <ChevronRight size={14} style={{ color: 'var(--text-tertiary)' }} />
-                        </div>
-                    );
-                  })
-                ) : (
-                  // GROUPED VIEW
-                  groupedData.map((group, idx) => (
-                    <div 
-                      key={idx} 
-                      style={{
-                        padding: '1rem', marginBottom: '0.75rem',
-                        backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)',
-                        border: '1px solid var(--border-secondary)',
-                        cursor: groupBy === 'sender' ? 'pointer' : 'default',
-                        transition: 'transform 0.2s, box-shadow 0.2s'
-                      }}
-                      onClick={() => {
-                        if (groupBy === 'sender') {
-                            navigate(`/domain/${encodeURIComponent(group.key)}`);
-                        }
-                      }}
-                      onMouseEnter={(e) => {
-                          if (groupBy === 'sender') {
-                              e.currentTarget.style.backgroundColor = 'var(--bg-overlay)';
-                              e.currentTarget.style.transform = 'translateY(-2px)';
-                              e.currentTarget.style.boxShadow = 'var(--shadow-md)';
-                          }
-                      }}
-                      onMouseLeave={(e) => {
-                          if (groupBy === 'sender') {
-                              e.currentTarget.style.backgroundColor = 'var(--bg-subtle)';
-                              e.currentTarget.style.transform = 'translateY(0)';
-                              e.currentTarget.style.boxShadow = 'none';
-                          }
-                      }}
-                    >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                <div style={{ 
-                                    width: '32px', height: '32px', borderRadius: '50%', 
-                                    backgroundColor: 'var(--bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontWeight: 'bold', color: 'var(--text-primary)', border: '1px solid var(--border-primary)'
-                                }}>
-                                    {group.count}
-                                </div>
-                                <div>
-                                    <h4 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        {groupBy === 'sender' ? group.key : <Badge variant={getVerdictStyle(group.key).variant}>{group.key}</Badge>}
-                                        {groupBy === 'sender' && <ExternalLink size={12} style={{ color: 'var(--primary-500)' }} />}
-                                    </h4>
-                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
-                                        Last seen: {getRelativeTime(group.latestTime)}
-                                    </span>
-                                </div>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Avg Risk</div>
-                                <strong style={{ color: group.avgRisk > 70 ? 'var(--danger-500)' : 'var(--text-primary)' }}>
-                                    {group.avgRisk}/100
-                                </strong>
-                            </div>
-                        </div>
-
-                        {/* Breakdown bar for Sender grouping */}
-                        {groupBy === 'sender' && (
-                            <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', marginTop: '8px' }}>
-                                {Object.entries(group.verdicts).map(([verdict, count], i) => (
-                                    <div key={i} style={{
-                                        width: `${(count / group.count) * 100}%`,
-                                        backgroundColor: getVerdictStyle(verdict).color
-                                    }} title={`${verdict}: ${count}`} />
-                                ))}
-                            </div>
-                        )}
-                        
-                        {/* Expandable list of latest cases in this group */}
-                         <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed var(--border-secondary)' }}>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', display: 'block', marginBottom: '0.5rem' }}>
-                                Latest activity in this group:
+      <div className="card__body" style={{ padding: showChart ? 'var(--space-4)' : 0, height: showChart ? '350px' : 'auto' }}>
+        {showChart ? (
+          // --- CHART VIEW ---
+          chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-primary)" />
+                <XAxis 
+                  dataKey="timestamp" 
+                  tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} 
+                  axisLine={false} tickLine={false}
+                />
+                <YAxis 
+                  yAxisId="left" orientation="left"
+                  tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }}
+                  axisLine={false} tickLine={false}
+                  label={{ value: 'Volume', angle: -90, position: 'insideLeft', style: { fill: 'var(--text-tertiary)', fontSize: 12 } }}
+                />
+                <YAxis 
+                  yAxisId="right" orientation="right" domain={[0, 100]}
+                  tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }}
+                  axisLine={false} tickLine={false}
+                  label={{ value: 'Severity', angle: 90, position: 'insideRight', style: { fill: 'var(--text-tertiary)', fontSize: 12 } }}
+                />
+                <RechartsTooltip 
+                  contentStyle={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)' }}
+                  labelStyle={{ color: 'var(--text-primary)', fontWeight: 'bold' }}
+                />
+                <Legend verticalAlign="top" height={36}/>
+                <Area yAxisId="left" type="monotone" dataKey="total_volume" name="Total Traffic" fill="url(#colorTotal)" stroke="var(--primary-500)" strokeWidth={2} fillOpacity={0.1} />
+                <Area yAxisId="left" type="monotone" dataKey="malicious_volume" name="Malicious Volume" fill="var(--danger-500)" stroke="var(--danger-500)" strokeWidth={2} fillOpacity={0.2} />
+                <Line yAxisId="right" type="monotone" dataKey="avg_risk" name="Avg Severity" stroke="#f59e0b" strokeWidth={2} dot={false} strokeDasharray="5 5" />
+                <defs>
+                  <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--primary-500)" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="var(--primary-500)" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-tertiary)' }}>
+              <div style={{ textAlign: 'center' }}>
+                <Activity size={32} style={{ opacity: 0.3, marginBottom: '0.5rem' }} />
+                <p>No activity detected.</p>
+              </div>
+            </div>
+          )
+        ) : (
+          // --- LIST VIEW ---
+          <div className="custom-scrollbar" style={{ maxHeight: '400px', overflowY: 'auto', padding: 'var(--space-4)' }}>
+            {groupedData.length > 0 ? (
+              groupBy === 'none' ? (
+                // Standard List
+                groupedData.map((item) => {
+                  const verdictStyle = getVerdictStyle(item.verdict);
+                  return (
+                    <div key={item.id} className="timeline-item" style={{
+                        display: 'flex', gap: '1rem', padding: '0.75rem',
+                        borderLeft: `4px solid ${verdictStyle.color}`,
+                        marginBottom: '0.5rem', backgroundColor: 'var(--bg-subtle)',
+                        borderRadius: 'var(--radius-md)', alignItems: 'center', cursor: 'pointer'
+                    }} onClick={() => navigate(`/report/${item.id}`)}>
+                        <div style={{ minWidth: '100px', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
+                            <span style={{ fontWeight: '600', display:'block', color: 'var(--text-secondary)' }}>
+                                {item.time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                             </span>
-                            {group.cases.slice(0, 3).map(c => (
-                                <div key={c.id} style={{ 
-                                    display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', 
-                                    marginBottom: '4px', cursor: 'pointer', padding: '4px', borderRadius: '4px' 
-                                }} className="hover-bg" onClick={(e) => {
-                                    e.stopPropagation(); // Prevent parent click
-                                    navigate(`/report/${c.id}`);
-                                }}>
-                                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '70%' }}>
-                                        {c.subject || '(No Subject)'}
-                                    </span>
-                                    <span style={{ color: getVerdictStyle(c.verdict).color, fontSize: '0.75rem' }}>
-                                        {c.risk_score}
-                                    </span>
-                                </div>
-                            ))}
-                            {groupBy === 'sender' && group.count > 3 && (
-                                <div style={{ fontSize: '0.75rem', color: 'var(--primary-500)', marginTop: '4px', fontStyle: 'italic' }}>
-                                    + {group.count - 3} more cases (Click to view all)
-                                </div>
-                            )}
-                         </div>
+                            {formatDate(item.time, false)}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                <Badge variant={verdictStyle.variant} style={{ fontSize: '0.7rem', padding: '2px 6px' }}>{item.verdict}</Badge>
+                                <span style={{ fontSize: '0.875rem', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {item.subject || 'No Subject'}
+                                </span>
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', display: 'flex', gap: '12px' }}>
+                                <span>From: <strong>{item.sender_domain}</strong></span>
+                                <span>Risk: <strong>{item.risk_score}/100</strong></span>
+                            </div>
+                        </div>
+                        <ChevronRight size={14} style={{ color: 'var(--text-tertiary)' }} />
                     </div>
-                  ))
-                )}
+                  );
+                })
+              ) : (
+                // Grouped List
+                groupedData.map((group, idx) => (
+                  <div key={idx} style={{
+                      padding: '1rem', marginBottom: '0.75rem',
+                      backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border-secondary)',
+                      cursor: groupBy === 'sender' ? 'pointer' : 'default'
+                  }} onClick={() => groupBy === 'sender' && navigate(`/domain/${encodeURIComponent(group.key)}`)}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--bg-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'var(--text-primary)', border: '1px solid var(--border-primary)' }}>
+                                  {group.count}
+                              </div>
+                              <div>
+                                  <h4 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      {groupBy === 'sender' ? group.key : <Badge variant={getVerdictStyle(group.key).variant}>{group.key}</Badge>}
+                                      {groupBy === 'sender' && <ExternalLink size={12} style={{ color: 'var(--primary-500)' }} />}
+                                  </h4>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Last seen: {getRelativeTime(group.latestTime)}</span>
+                              </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>Avg Risk</div>
+                              <strong style={{ color: group.avgRisk > 70 ? 'var(--danger-500)' : 'var(--text-primary)' }}>{group.avgRisk}/100</strong>
+                          </div>
+                      </div>
+                      {groupBy === 'sender' && (
+                          <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', marginTop: '8px' }}>
+                              {Object.entries(group.verdicts).map(([verdict, count], i) => (
+                                  <div key={i} style={{ width: `${(count / group.count) * 100}%`, backgroundColor: getVerdictStyle(verdict).color }} title={`${verdict}: ${count}`} />
+                              ))}
+                          </div>
+                      )}
+                  </div>
+                ))
+              )
+            ) : (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
+                <p>No cases found for this period.</p>
               </div>
             )}
-          </>
-        ) : (
-          <div style={{ padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-tertiary)' }}>
-            <Activity size={32} style={{ opacity: 0.3, marginBottom: '0.5rem' }} />
-            <p style={{ fontSize: '0.875rem' }}>
-              No activity detected in the last {timeRange}.
-            </p>
           </div>
         )}
       </div>
     </Card>
   );
 };
-// FILE: App.js
 
 /**
  * NEW: Domain/Sender Profile Page
@@ -3417,20 +3452,29 @@ const Dashboard = () => {
 // 3. NEW MAIN ENTRY POINT: APP (Handles Routing)
 // ============================================================================
 // FILE: App.js
-
 function App() {
-  const { theme } = useTheme();
+  // Initialize theme here once
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <Router>
       <div className="app" data-theme={theme}>
         <Routes>
           <Route path="/" element={<Navigate to="/home" replace />} />
-          <Route path="/home" element={<Dashboard />} />
+          
+          {/* Pass theme props to Dashboard */}
+          <Route 
+            path="/home" 
+            element={<Dashboard theme={theme} toggleTheme={toggleTheme} />} 
+          />
+          
           <Route path="/report/:id" element={<ReportPage />} />
           
-          {/* === NEW ROUTE === */}
-          <Route path="/domain/:domainName" element={<DomainProfile />} />
+          {/* Pass theme props to DomainProfile */}
+          <Route 
+            path="/domain/:domainName" 
+            element={<DomainProfile theme={theme} toggleTheme={toggleTheme} />} 
+          />
         </Routes>
       </div>
     </Router>

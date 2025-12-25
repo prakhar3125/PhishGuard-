@@ -2877,14 +2877,3 @@ body {
   }
 }
 
-/* Timeline sparkle effect on hover */
-.timeline-card:hover .card__header h3::after {
-  content: '✨';
-  margin-left: 8px;
-  animation: sparkle 1s infinite;
-}
-
-@keyframes sparkle {
-  0%, 100% { opacity: 0; }
-  50% { opacity: 1; }
-}
