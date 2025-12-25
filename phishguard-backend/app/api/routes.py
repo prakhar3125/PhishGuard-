@@ -281,6 +281,81 @@ def get_statistics(db: Session = Depends(get_db)):
         ]
     }
 
+# In routes.py, add this new endpoint for optimized timeline data:
+
+@router.get("/timeline/aggregated")
+def get_timeline_aggregated(
+    hours: int = 24,
+    group_by: str = "hour",  # 'hour', 'sender', 'verdict'
+    db: Session = Depends(get_db)
+):
+    """
+    Get aggregated timeline data for performance
+    """
+    from datetime import datetime, timedelta
+    from sqlalchemy import and_
+    
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    
+    if group_by == "hour":
+        # Aggregate by hour buckets
+        cases = db.query(
+            func.date_trunc('hour', PhishingCase.processed_at).label('hour'),
+            PhishingCase.verdict,
+            func.count(PhishingCase.id).label('count'),
+            func.avg(PhishingCase.risk_score).label('avg_risk')
+        ).filter(
+            PhishingCase.processed_at >= cutoff
+        ).group_by(
+            func.date_trunc('hour', PhishingCase.processed_at),
+            PhishingCase.verdict
+        ).order_by(
+            func.date_trunc('hour', PhishingCase.processed_at).desc()
+        ).all()
+        
+        return {
+            "type": "aggregated_hourly",
+            "data": [
+                {
+                    "timestamp": hour.isoformat() if hour else None,
+                    "verdict": verdict,
+                    "count": count,
+                    "avg_risk_score": round(float(avg_risk), 2) if avg_risk else 0
+                }
+                for hour, verdict, count, avg_risk in cases
+            ]
+        }
+    
+    elif group_by == "sender":
+        # Aggregate by sender domain
+        cases = db.query(
+            PhishingCase.sender_domain,
+            func.count(PhishingCase.id).label('count'),
+            func.avg(PhishingCase.risk_score).label('avg_risk'),
+            func.max(PhishingCase.risk_score).label('max_risk')
+        ).filter(
+            PhishingCase.processed_at >= cutoff
+        ).group_by(
+            PhishingCase.sender_domain
+        ).order_by(
+            func.count(PhishingCase.id).desc()
+        ).limit(20).all()
+        
+        return {
+            "type": "aggregated_sender",
+            "data": [
+                {
+                    "domain": domain,
+                    "count": count,
+                    "avg_risk_score": round(float(avg_risk), 2) if avg_risk else 0,
+                    "max_risk_score": int(max_risk) if max_risk else 0
+                }
+                for domain, count, avg_risk, max_risk in cases
+            ]
+        }
+    
+    return {"error": "Invalid group_by parameter"}
+
 @router.get("/iocs", response_model=List[dict])
 def search_iocs(
     ioc_value: str = None, 
